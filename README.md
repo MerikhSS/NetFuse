@@ -219,6 +219,7 @@ Each network needs its own internet connection to add bandwidth. NetFuse combine
 ## Credits
 
 - Steam's protocol is handled by [steam-user](https://github.com/DoctorMcKay/node-steam-user) and [steam-session](https://github.com/DoctorMcKay/node-steam-session) by Alex Corn.
+- [Plexo](https://github.com/anmolkapil/plexo), as the inspiration for merging networks and designing of blocked downloads
 
 Steam is a trademark of Valve Corporation. NetFuse isn't affiliated with or endorsed by Valve.
 
