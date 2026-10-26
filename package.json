@@ -1,6 +1,6 @@
 {
   "name": "netfuse",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Download your Steam games over every network you have at once",
   "main": "./out/main/index.js",
   "author": "MerikhSS",

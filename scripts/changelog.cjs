@@ -10,6 +10,16 @@
 
   root.NetFuseChangelog = [
     {
+      version: 'v0.2.0',
+      items: [
+        {
+          kind: 'new',
+          title: 'Help with an iPhone on Windows',
+          text: 'Plug in an iPhone that Windows can’t use as a network yet, and NetFuse says what it takes, with a button to Apple Devices, Apple’s free app that brings the driver. It goes away by itself once the iPhone is a network, and Never show again turns it off.'
+        }
+      ]
+    },
+    {
       version: 'v0.1.0',
       items: [
         {
