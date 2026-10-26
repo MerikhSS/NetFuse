@@ -11,6 +11,7 @@ import type {
   AppSettings,
   DownloadUpdate,
   InitialState,
+  IphoneTetherState,
   NetworkInterfaceInfo,
   UpdateState
 } from '../shared/types'
@@ -33,6 +34,8 @@ const netfuseApi = {
   listInterfaces: () => invoke('listInterfaces'),
   deviceBindingSupported: () => invoke('deviceBindingSupported'),
   openNetworkSettings: () => invoke('openNetworkSettings'),
+  iphoneTether: () => invoke('iphoneTether'),
+  openAppleDevices: () => invoke('openAppleDevices'),
   updateSettings: (patch: AppSettings) => invoke('updateSettings', patch),
   chooseDestinationFolder: (defaultPath: string) => invoke('chooseDestinationFolder', defaultPath),
   revealDownload: (id: string) => invoke('revealDownload', id),
@@ -103,6 +106,12 @@ const netfuseApi = {
       callback(networks)
     ipcRenderer.on(IpcChannels.networksChanged, listener)
     return () => ipcRenderer.removeListener(IpcChannels.networksChanged, listener)
+  },
+
+  onIphoneTether: (callback: (state: IphoneTetherState) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, state: IphoneTetherState): void => callback(state)
+    ipcRenderer.on(IpcChannels.iphoneTetherChanged, listener)
+    return () => ipcRenderer.removeListener(IpcChannels.iphoneTetherChanged, listener)
   }
 }
 

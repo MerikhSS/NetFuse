@@ -1,5 +1,6 @@
 import type { DownloadState, FinishedDownload } from '@shared/types'
 import { DownloadActionsProvider } from './components/DownloadActionsProvider'
+import { IphoneTetherDialog } from './components/IphoneTetherDialog'
 import { NetworkBindingDialog } from './components/NetworkBindingDialog'
 import { Sidebar } from './components/Sidebar'
 import { StatusBar } from './components/StatusBar'
@@ -78,6 +79,8 @@ function Shell(): React.JSX.Element {
         </main>
       </div>
       <StatusBar />
+      {/* Not over the login: it would take the keyboard from someone typing a password. */}
+      <IphoneTetherDialog />
     </div>
   )
 }

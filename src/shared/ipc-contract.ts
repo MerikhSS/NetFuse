@@ -11,20 +11,26 @@ import type {
   AppSettings,
   DownloadUpdate,
   FinishedDownload,
+  IphoneTetherState,
   NetworkInterfaceInfo,
   StartDownloadRequest,
   UpdateState
 } from './types'
 
 /** The request/response half of the IPC surface (every IpcChannels entry except the
- * main->renderer push events, downloadUpdated, networksChanged, historyChanged,
- * updateStateChanged, steamLoginStateChanged and steamPrepareProgress) — one source of truth for
+ * main->renderer push events, downloadUpdated, networksChanged, iphoneTetherChanged,
+ * historyChanged, updateStateChanged, steamLoginStateChanged and steamPrepareProgress) — one source of truth for
  * both netfuseApi (preload) and registerIpcHandlers (main), so a signature drift between the two
  * is a compile error instead of a runtime one. */
 export interface IpcContract {
   listInterfaces: { args: []; result: NetworkInterfaceInfo[] }
   deviceBindingSupported: { args: []; result: boolean }
   openNetworkSettings: { args: []; result: void }
+  /** On Windows, whether an iPhone is plugged in without being a network (see
+   * main/network/iphone.ts). */
+  iphoneTether: { args: []; result: IphoneTetherState }
+  /** Opens Apple Devices in the Microsoft Store: the app that brings Windows Apple's driver. */
+  openAppleDevices: { args: []; result: void }
   updateSettings: { args: [patch: AppSettings]; result: void }
   chooseDestinationFolder: { args: [defaultPath: string]; result: string | null }
   /** Shows a download's folder, by the download's own path. False when nothing is there any

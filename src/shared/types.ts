@@ -21,6 +21,11 @@ export interface NetworkInterfaceInfo {
   mac?: string
 }
 
+/** On Windows, an iPhone plugged in that isn't one of the networks: `driverInstalled` says
+ * whether Apple's driver is there already, leaving only the phone's settings. */
+export type IphoneTetherState =
+  { status: 'none' } | { status: 'not-tethered'; driverInstalled: boolean }
+
 /** `queued`: waiting for one of the downloads running at once to end (see
  * AppSettings.downloadsAtOnce). */
 export type DownloadStatus =
