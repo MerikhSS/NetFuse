@@ -1,0 +1,83 @@
+appId: com.netfuse.app
+productName: NetFuse
+# Shown in the macOS About window and Finder's Get Info, and in the Windows file properties.
+copyright: Copyright © 2026 MerikhSS
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  # koffi ships prebuilds for every OS; it's loaded on Linux (network/deviceBinding.ts) and on
+  # Windows (download/sparseFile.ts).
+  - '!node_modules/koffi/{src,vendor,doc}/**'
+  - '!node_modules/koffi/build/koffi/!(linux_x64|linux_arm64|win32_x64|win32_arm64)/**'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+asarUnpack:
+  - resources/**
+win:
+  executableName: netfuse
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+nsis:
+  # No ${arch} on purpose: one installer holds both x64 and ARM64.
+  artifactName: ${name}-${version}-setup.${ext}
+  # Assisted installer instead of one-click, so users can choose the install folder (and drive).
+  # One-click always installs to %LOCALAPPDATA%\Programs with no way to change it.
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+mac:
+  # Only the zips go by this name: the dmg has its own (dmg.artifactName).
+  artifactName: ${name}-${version}-${arch}-mac.${ext}
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    # Not for people: the app's updater installs from these (see src/main/updater.ts).
+    - target: zip
+      arch: [x64, arm64]
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    - NSDownloadsFolderUsageDescription: NetFuse installs games to a folder you choose, which may be in your Downloads folder.
+  # Signed when CSC_LINK/CSC_KEY_PASSWORD are set, and then notarized when APPLE_API_KEY,
+  # APPLE_API_KEY_ID and APPLE_API_ISSUER are (see .github/workflows/release.yml). An unsigned
+  # build still works, but can't update itself: macOS only installs signed updates.
+dmg:
+  artifactName: ${name}-${version}-${arch}.${ext}
+linux:
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64, arm64]
+    - target: rpm
+      arch: [x64, arm64]
+    # Plain archive for distros without FUSE or a native package (AUR packagers, NixOS, etc.):
+    # extract and run ./netfuse. Doesn't update itself, like the .deb and .rpm.
+    - target: tar.gz
+      arch: [x64, arm64]
+  # Names the .tar.gz, which has no options of its own. Without it the x64 archive would carry no
+  # architecture. The deb and rpm sections below keep their usual names, since they'd otherwise
+  # inherit this one.
+  artifactName: ${name}-${version}-${arch}.${ext}
+  maintainer: MerikhSS
+  category: Game
+appImage:
+  artifactName: ${name}-${version}-${arch}.${ext}
+deb:
+  artifactName: ${name}_${version}_${arch}.${ext}
+rpm:
+  artifactName: ${name}-${version}.${arch}.${ext}
+npmRebuild: false
+# Where the app looks for updates. Builds never publish themselves (--publish never): the release
+# workflow uploads them, with the latest*.yml files the updater reads.
+publish:
+  provider: github
+  # NetFuse's own releases.
+  owner: MerikhSS
+  repo: NetFuse

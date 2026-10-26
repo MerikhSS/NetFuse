@@ -1,0 +1,61 @@
+name: E2E nightly
+
+# The whole e2e suite — including the @disk tier the PR job skips — on both platforms, with the
+# race-prone tests repeated so an intermittent failure shows up here rather than in someone's
+# download.
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    name: E2E (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npx electron-vite build
+
+      # The @disk tests mount small tmpfs volumes, which needs passwordless sudo (GitHub's
+      # Linux runners have it); elsewhere they skip themselves.
+      # Keep Xvfb alive between Electron launches: resetting when its last client exits can
+      # race the next parallel launch and fail before the application starts.
+      - name: Full suite (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24 -noreset" npx playwright test
+        env:
+          NETFUSE_E2E_SKIP_BUILD: '1'
+
+      - name: Full suite (Windows)
+        if: runner.os == 'Windows'
+        run: npx playwright test
+        env:
+          NETFUSE_E2E_SKIP_BUILD: '1'
+
+      - name: Race-prone tests, repeated
+        run: ${{ runner.os == 'Linux' && 'xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24 -noreset" ' || '' }}npx playwright test e2e/steamLifecycle.spec.ts --repeat-each=10
+        env:
+          NETFUSE_E2E_SKIP_BUILD: '1'
+
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.os }}
+          path: playwright-report
+          retention-days: 14
