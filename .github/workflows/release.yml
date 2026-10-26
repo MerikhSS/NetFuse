@@ -3,12 +3,18 @@ name: Release
 # Pushing a version tag (git tag v1.0.0-rc.15 && git push origin v1.0.0-rc.15) builds every OS
 # and leaves a draft GitHub Release. Apps only see it once the draft is published.
 #
-# Run by hand (gh workflow run release.yml --ref <branch>) it's a dry run: the same builds, signed
-# the same way, and no release.
+# Run by hand with a version (gh workflow run release.yml --ref <branch> -f tag=v1.0.0), it does
+# the same for the commit it runs on, and tags that commit itself: for when the tag can't be
+# pushed. Without a version it's a dry run: the same builds, signed the same way, and no release.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Version to release from this commit, such as v1.0.0. Leave empty for a dry run.
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -37,11 +43,13 @@ jobs:
       # The tag names the version the build gets; a mismatch would ship one version as another. The
       # changelog entry becomes the release notes. Both are checked before the long build.
       - name: Check the tag matches package.json and has a changelog entry
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || inputs.tag != ''
         shell: bash
+        env:
+          TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
         run: |
-          test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
-          node scripts/release-notes.mjs "$GITHUB_REF_NAME" --changelog > /dev/null
+          test "v$(node -p "require('./package.json').version")" = "$TAG"
+          node scripts/release-notes.mjs "$TAG" --changelog > /dev/null
 
       - name: Install rpmbuild
         if: runner.os == 'Linux'
@@ -101,7 +109,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || inputs.tag != ''
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -112,10 +120,20 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # Pushed with this workflow's own token, the tag starts no second run of it. Tagged now, not
+      # when the draft is published, so publishing doesn't either.
+      - name: Tag the commit
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          git tag "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
+
       - name: Create a draft release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
         run: |
           node scripts/release-notes.mjs "$TAG" > "$RUNNER_TEMP/notes.md"
           node scripts/release-notes.mjs "$TAG" --files > "$RUNNER_TEMP/files.txt"
