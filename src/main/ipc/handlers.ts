@@ -27,6 +27,7 @@ import { getDefaultDownloadsDir, getHomeDir } from '../download/paths'
 import { listHistory } from '../download/history'
 import { deviceBindingSupported } from '../network/deviceBinding'
 import { NetworkMonitor } from '../network/interfaces'
+import { IphoneWatch } from '../network/iphoneWatch'
 import { loadSettings, saveSettings } from '../settings'
 import { showUpdateMenu, updateState } from '../updater'
 
@@ -42,6 +43,19 @@ async function openNetworkSettings(): Promise<void> {
     } catch {
       // Best-effort
     }
+  }
+}
+
+/** Apple Devices in the Microsoft Store, Apple's app that brings Windows the driver an iPhone's
+ * tethering needs. The store link opens the Store app; the web page is for a Windows without one. */
+const APPLE_DEVICES_STORE = 'ms-windows-store://pdp/?ProductId=9NP83LWLPZ9K'
+const APPLE_DEVICES_WEB = 'https://apps.microsoft.com/detail/9NP83LWLPZ9K'
+
+async function openAppleDevices(): Promise<void> {
+  try {
+    await shell.openExternal(APPLE_DEVICES_STORE)
+  } catch {
+    await shell.openExternal(APPLE_DEVICES_WEB)
   }
 }
 
@@ -174,6 +188,15 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Down
   })
 
   handle('listInterfaces', () => networks.refresh())
+
+  const iphone = new IphoneWatch(networks, (state) => {
+    const window = getWindow()
+    if (window && !window.isDestroyed()) {
+      window.webContents.send(IpcChannels.iphoneTetherChanged, state)
+    }
+  })
+  handle('iphoneTether', () => iphone.current)
+  handle('openAppleDevices', () => openAppleDevices())
 
   // Started now so it has settled before the first download needs it.
   const bindingSupport = deviceBindingSupported()

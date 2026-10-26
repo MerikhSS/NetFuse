@@ -22,7 +22,28 @@ export const testKnobs = {
    * steam/steamTransfer.ts. */
   serverBusyForMs: positiveNumber('NETFUSE_E2E_SERVER_BUSY_MS', 5 * 60_000),
   silentAfterMs: positiveNumber('NETFUSE_E2E_SILENT_MS', 5_000),
-  hedgeAfterMs: positiveNumber('NETFUSE_E2E_HEDGE_MS', 2_000)
+  hedgeAfterMs: positiveNumber('NETFUSE_E2E_HEDGE_MS', 2_000),
+  /** How long a plugged-in iPhone gets to become a network before NetFuse says how; see
+   * network/iphone.ts. */
+  iphoneSettleMs: positiveNumber('NETFUSE_E2E_IPHONE_SETTLE_MS', 10_000)
+}
+
+/** What an iPhone plugged into Windows looks like, in place of looking (see network/iphone.ts):
+ * `unplugged`, `no-driver` (plugged in, Apple's driver missing), `hotspot-off` (the driver there,
+ * no network) or `tethered`. Set at launch, it also watches on systems other than Windows. Read on
+ * every call, so a test can plug and unplug the phone by rewriting process.env in the main
+ * process. */
+export type TestIphone = 'unplugged' | 'no-driver' | 'hotspot-off' | 'tethered'
+
+export function testIphone(): TestIphone | undefined {
+  if (app.isPackaged) return undefined
+  const value = process.env['NETFUSE_E2E_IPHONE']
+  return value === 'unplugged' ||
+    value === 'no-driver' ||
+    value === 'hotspot-off' ||
+    value === 'tethered'
+    ? value
+    : undefined
 }
 
 /** `NETFUSE_E2E_STEAM=http://127.0.0.1:1234` stands a local fake in for Steam itself (see

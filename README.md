@@ -169,7 +169,8 @@ NetFuse can use any connection your operating system shows as a network adapter.
 
 - **iPhone on macOS**: in **System Settings › Network**, open **iPhone USB** and turn off **Disable unless needed**
 - **Android on macOS**: install TetherKit, as described below
-- **Phone on Windows**: install your phone maker's driver if the phone doesn't appear in Network Settings
+- **iPhone on Windows**: Windows needs Apple's driver, which comes with Apple's free [Apple Devices](https://apps.microsoft.com/detail/9NP83LWLPZ9K) app (or iTunes). NetFuse notices an iPhone it can't use yet and shows the way. Then unlock the iPhone, tap **Trust**, and turn on **Personal Hotspot**
+- **Android phone on Windows**: install your phone maker's driver if the phone doesn't appear in Network Settings
 
 </details>
 

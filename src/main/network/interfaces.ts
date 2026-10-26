@@ -3,6 +3,7 @@ import { networkInterfaces } from 'node:os'
 import { promisify } from 'node:util'
 import type { NetworkAddress, NetworkInterfaceInfo, NetworkInterfaceKind } from '../../shared/types'
 import { testInterfaces } from '../testKnobs'
+import { isIphoneAdapter } from './iphone'
 
 const execFileAsync = promisify(execFile)
 const DISCOVERY_TIMEOUT_MS = 5000
@@ -180,6 +181,18 @@ export async function listActiveInterfaces(): Promise<NetworkInterfaceInfo[]> {
   }
 
   return result
+}
+
+/** Whether one of `networks`, as listActiveInterfaces last found them, is an iPhone's USB
+ * tethering, by what Apple's driver calls its adapter. Null when Windows' adapter list couldn't be
+ * read, which leaves no telling. */
+export async function iphoneTethered(networks: NetworkInterfaceInfo[]): Promise<boolean | null> {
+  if (!labels) return null
+  const [, adapters] = await labels.lookup
+  if (adapters.size === 0) return null
+  return networks.some((network) =>
+    isIphoneAdapter(adapters.get(network.device)?.InterfaceDescription ?? '')
+  )
 }
 
 const POLL_MS = 1000
