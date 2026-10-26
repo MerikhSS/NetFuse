@@ -65,7 +65,21 @@ How much faster depends on your networks: each one adds speed only if it has its
 
 ## Install
 
-There are no prebuilt installers yet: NetFuse builds from source in a few minutes. You need [Git](https://git-scm.com/) and [Node.js](https://nodejs.org/) 22.13 or later.
+### Windows
+
+1. Download **`netfuse-<version>-setup.exe`** from the [latest release](https://github.com/MerikhSS/NetFuse/releases/latest).
+2. Run it, and choose where to install NetFuse.
+3. Open NetFuse from the Start menu or the desktop, and log in to Steam.
+
+One installer covers both regular (x64) and ARM PCs. It isn't code-signed yet, so Windows may say "Windows protected your PC": click **More info**, then **Run anyway**.
+
+### macOS and Linux
+
+The [same release](https://github.com/MerikhSS/NetFuse/releases/latest) has `.dmg` packages for Apple silicon and Intel Macs, and an AppImage, `.deb`, `.rpm` and `.tar.gz` for Linux. Its notes say how to open each.
+
+### Build from source
+
+NetFuse builds from source in a few minutes. You need [Git](https://git-scm.com/) and [Node.js](https://nodejs.org/) 22.13 or later.
 
 ```bash
 git clone https://github.com/MerikhSS/NetFuse.git
