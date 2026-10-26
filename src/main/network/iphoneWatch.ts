@@ -125,24 +125,43 @@ function fakeLook(fake: NonNullable<ReturnType<typeof testIphone>>): IphoneLook 
   }
 }
 
-/** The iPhone popup's state, kept current: `onChange` hears of every change. On macOS and Linux,
- * which tether an iPhone by themselves, it never looks. */
+/** The iPhone popup's state, kept current: `onChange` hears of every change. It looks only once
+ * setEnabled says to, as the settings may have turned the popup off, and never on macOS and
+ * Linux, which tether an iPhone by themselves. */
 export class IphoneWatch {
   private state: IphoneTetherState = { status: 'none' }
   private untetheredSince: number | null = null
   private driver: { installed: boolean; checkedAt: number } | null = null
   private looking = false
+  private timer: NodeJS.Timeout | null = null
+  private readonly watches = process.platform === 'win32' || testIphone() !== undefined
 
   constructor(
     private readonly networks: NetworkMonitor,
     private readonly onChange: (state: IphoneTetherState) => void
-  ) {
-    if (process.platform !== 'win32' && testIphone() === undefined) return
-    setInterval(() => void this.look(), POLL_MS).unref()
-  }
+  ) {}
 
   get current(): IphoneTetherState {
     return this.state
+  }
+
+  /** Off ("Never show again"), it stops looking altogether, and there's nothing to show. */
+  setEnabled(enabled: boolean): void {
+    if (enabled && this.watches && !this.timer) {
+      this.timer = setInterval(() => void this.look(), POLL_MS).unref()
+    } else if (!enabled && this.timer) {
+      clearInterval(this.timer)
+      this.timer = null
+      this.untetheredSince = null
+      this.driver = null
+      this.update({ status: 'none' })
+    }
+  }
+
+  private update(next: IphoneTetherState): void {
+    if (JSON.stringify(next) === JSON.stringify(this.state)) return
+    this.state = next
+    this.onChange(next)
   }
 
   private async look(): Promise<void> {
@@ -151,15 +170,12 @@ export class IphoneWatch {
     this.looking = true
     try {
       const look = await this.see()
-      if (!look) return
+      // Turned off while it looked: what it found no longer matters.
+      if (!look || !this.timer) return
       const now = Date.now()
       if (look.connected && look.tethered === false) this.untetheredSince ??= now
       else this.untetheredSince = null
-      const next = iphoneTetherState(look, this.untetheredSince, now, testKnobs.iphoneSettleMs)
-      if (JSON.stringify(next) !== JSON.stringify(this.state)) {
-        this.state = next
-        this.onChange(next)
-      }
+      this.update(iphoneTetherState(look, this.untetheredSince, now, testKnobs.iphoneSettleMs))
     } finally {
       this.looking = false
     }

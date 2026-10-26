@@ -267,6 +267,9 @@ export interface AppSettings {
   slowModeSpeed?: number
   /** How speeds are shown everywhere; sizes stay in bytes either way. */
   speedUnit?: SpeedUnit
+  /** Only ever saved as false, by "Never show again": the popup about an iPhone plugged into
+   * Windows that isn't a network (see main/network/iphone.ts) shows unless turned off. */
+  iphoneTetherPopup?: boolean
 }
 
 /** bytes: MB/s. bits: Mbps, as internet plans and speed tests count them. */
