@@ -1,5 +1,13 @@
 # Custom NSIS hooks, picked up automatically by electron-builder from build/installer.nsh.
 
+# NSIS adds the last folder of InstallDir to any folder picked with Browse, so choosing D:\ shows
+# D:\NetFuse straight away rather than leaving people to make and name the folder themselves.
+# electron-builder sets no InstallDir of its own (multiUser.nsh picks the folder at launch, which
+# still decides where it goes), so without this, Browse adds nothing.
+!macro customHeader
+  InstallDir "$LOCALAPPDATA\Programs\${APP_FILENAME}"
+!macroend
+
 # Replaces electron-builder's default finish page (assistedInstaller.nsh) to add a
 # "Create a desktop shortcut" checkbox, checked by default. The install step has already created
 # the shortcut (createDesktopShortcut in electron-builder.yml), so the checkbox only decides whether
