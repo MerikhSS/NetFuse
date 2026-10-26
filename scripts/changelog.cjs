@@ -15,7 +15,7 @@
         {
           kind: 'improved',
           title: 'Half the download on Windows',
-          text: 'There’s now an installer for each kind of PC: 124 MB for most PCs and 118 MB for ARM ones, instead of 251 MB for both together. The app is smaller on every system too.'
+          text: 'There’s now an installer for each kind of PC: 118 MB for most PCs and 113 MB for ARM ones, instead of 240 MB for both together. The app is smaller on every system too.'
         },
         {
           kind: 'improved',
