@@ -18,7 +18,7 @@ Requires Node.js 22.13+ and npm 9+, on Windows, macOS, or Linux.
 Run packaging commands on the corresponding operating system. Packages are written to `dist/`.
 
 - **macOS**: `npm run build:mac` creates Intel and Apple silicon `.dmg` and `.zip` packages. Unpacked apps are in `dist/mac/NetFuse.app` and `dist/mac-arm64/NetFuse.app`.
-- **Windows**: `npm run build:win` creates one installer for x64 and ARM64. `npm run build:unpack` creates an unpacked app for the current architecture; run `dist/win-unpacked/netfuse.exe`.
+- **Windows**: `npm run build:win` creates an installer for x64 and one for ARM64. `npm run build:unpack` creates an unpacked app for the current architecture; run `dist/win-unpacked/netfuse.exe`.
 - **Linux**: `npm run build:linux` creates AppImage, `.deb`, `.rpm` and `.tar.gz` packages for x86_64 and ARM64. RPM packaging requires `rpmbuild`; the release workflow installs it through the `rpm` package.
 
 Local builds are unsigned unless signing credentials are configured.
@@ -67,7 +67,7 @@ Tests build the app first; set `NETFUSE_E2E_SKIP_BUILD=1` when `out/` is already
 
 ## Releasing
 
-A release ships NetFuse for macOS (Apple silicon and Intel `.dmg`), Windows (one installer for x64 and ARM64) and Linux (AppImage, `.deb`, `.rpm` and `.tar.gz`, x86_64 and ARM64). The release notes label each file from its name (`scripts/downloads.cjs`), so keep the naming in `electron-builder.yml` intact.
+A release ships NetFuse for macOS (Apple silicon and Intel `.dmg`), Windows (an installer each for x64 and ARM64) and Linux (AppImage, `.deb`, `.rpm` and `.tar.gz`, x86_64 and ARM64). The release notes label each file from its name (`scripts/downloads.cjs`), so keep the naming in `electron-builder.yml` intact.
 
 First bump the version and add its entry at the top of `scripts/changelog.cjs`, in one PR. The entry becomes the release notes, and a tag without one stops before building.
 

@@ -42,9 +42,11 @@ if (arg === '--changelog') {
 }
 
 const version = tag.slice(1)
-// RPM names use a dot before the architecture; other builds use a hyphen or underscore.
+// RPM names use a dot before the architecture; other builds use a hyphen or underscore. The
+// Windows installers name theirs before "setup" (netfuse-1.0.0-x64-setup.exe), so the version
+// is matched lazily: it ends at the first architecture.
 const artifactName =
-  /^netfuse[-_](.+)(?:[-_](?:setup|x64|x86_64|amd64|arm64)\.(?:tar\.gz|[^.]+)|\.(?:x86_64|aarch64)\.rpm)$/
+  /^netfuse[-_](.+?)(?:[-_](?:(?:x64|arm64)[-_]setup|setup|x64|x86_64|amd64|arm64)\.(?:tar\.gz|[^.]+)|\.(?:x86_64|aarch64)\.rpm)$/
 const dist = fileURLToPath(new URL('../dist/', import.meta.url))
 const files = readdirSync(dist)
   .filter((name) => name.match(artifactName)?.[1] === version && downloads.describe(name))

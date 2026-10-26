@@ -6,7 +6,8 @@ import { join, resolve } from 'node:path'
 const builds = (version: string): string[] => [
   `netfuse-${version}-arm64.AppImage`,
   `netfuse-${version}-arm64.dmg`,
-  `netfuse-${version}-setup.exe`,
+  `netfuse-${version}-arm64-setup.exe`,
+  `netfuse-${version}-x64-setup.exe`,
   `netfuse-${version}-x64.dmg`,
   `netfuse-${version}-x86_64.AppImage`,
   `netfuse-${version}.aarch64.rpm`,
@@ -23,7 +24,8 @@ const updateFiles = (version: string): string[] => [
   `netfuse-${version}-arm64-mac.zip`,
   `netfuse-${version}-x64-mac.zip`,
   `netfuse-${version}-arm64-mac.zip.blockmap`,
-  `netfuse-${version}-setup.exe.blockmap`
+  `netfuse-${version}-arm64-setup.exe.blockmap`,
+  `netfuse-${version}-x64-setup.exe.blockmap`
 ]
 const channelFiles = ['latest.yml', 'latest-mac.yml', 'latest-linux.yml']
 

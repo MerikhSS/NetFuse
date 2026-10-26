@@ -29,7 +29,9 @@
     mac: [
       'Not sure which Mac you have? Apple menu → About This Mac: “Chip: Apple M…” is Apple silicon, “Processor: Intel…” is Intel.'
     ],
-    win: ['One installer covers both regular (x64) and ARM PCs.'],
+    win: [
+      'Not sure which PC you have? Settings → System → About: “System type” says x64-based or ARM-based. Most PCs are x64.'
+    ],
     linux: [
       'AppImage: `chmod +x netfuse-*.AppImage`, then run it. Recent Ubuntu needs FUSE 2 first: `sudo apt install libfuse2t64` (older releases call it `libfuse2`) — or use the .deb, which needs nothing extra.',
       '.deb: `sudo apt install ./netfuse_*.deb`.',
@@ -51,7 +53,7 @@
       return mk('mac', arch, 'dmg', 'macOS', '.dmg', 2)
     }
     if (/\.exe$/.test(n)) {
-      // Our installer carries no architecture in its name because one file holds both.
+      // Installers up to 0.2.0 held both architectures, with none in their name.
       if (arch === 'any') {
         return mk('win', arch, 'exe', 'Windows 10 and 11', 'Installer · x64 and ARM64', 0)
       }

@@ -10,11 +10,14 @@ files:
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  # The repository's own documents, tests and tools: nothing the app runs.
+  - '!{docs,e2e,scripts,test-results,playwright-report,.github}/**'
+  - '!{CLAUDE.md,CONTRIBUTING.md,SECURITY.md,components.json,playwright.config.ts}'
   # koffi ships prebuilds for every OS; it's loaded on Linux (network/deviceBinding.ts) and on
-  # Windows (download/sparseFile.ts).
+  # Windows (download/sparseFile.ts, network/iphoneWatch.ts).
   - '!node_modules/koffi/{src,vendor,doc}/**'
   - '!node_modules/koffi/build/koffi/!(linux_x64|linux_arm64|win32_x64|win32_arm64)/**'
-  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,tsconfig.e2e.json}'
 asarUnpack:
   - resources/**
 win:
@@ -23,8 +26,10 @@ win:
     - target: nsis
       arch: [x64, arm64]
 nsis:
-  # No ${arch} on purpose: one installer holds both x64 and ARM64.
-  artifactName: ${name}-${version}-setup.${ext}
+  # One installer for each architecture, rather than one holding both at twice the size. The
+  # architecture in the name is how the app's updater picks its own from latest.yml.
+  buildUniversalInstaller: false
+  artifactName: ${name}-${version}-${arch}-setup.${ext}
   # Assisted installer instead of one-click, so users can choose the install folder (and drive).
   # One-click always installs to %LOCALAPPDATA%\Programs with no way to change it.
   oneClick: false

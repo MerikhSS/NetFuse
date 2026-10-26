@@ -27,25 +27,19 @@
     "test:e2e:smoke": "playwright test --grep @smoke"
   },
   "dependencies": {
-    "@base-ui/react": "^1.8.0",
-    "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
-    "class-variance-authority": "^0.7.1",
-    "cn": "^0.3.0",
-    "date-fns": "^4.4.0",
     "electron-updater": "^6.8.9",
     "koffi": "^2.16.3",
-    "lucide-react": "^1.47.0",
     "qrcode-generator": "2.0.4",
-    "react-day-picker": "^10.0.2",
     "steam-session": "1.9.4",
-    "steam-user": "5.3.0",
-    "zustand": "^5.0.15"
+    "steam-user": "5.3.0"
   },
   "devDependencies": {
+    "@base-ui/react": "^1.8.0",
     "@doctormckay/steam-crypto": "1.2.0",
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
     "@electron-toolkit/eslint-config-ts": "^3.1.0",
+    "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
@@ -53,6 +47,9 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.3.0",
+    "date-fns": "^4.4.0",
     "electron": "^44.4.4",
     "electron-builder": "^26.16.1",
     "electron-vite": "^5.0.0",
@@ -61,14 +58,17 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "fast-check": "^4.10.1",
+    "lucide-react": "^1.47.0",
     "lzma": "2.3.2",
     "prettier": "^3.7.4",
     "react": "^19.2.1",
+    "react-day-picker": "^10.0.2",
     "react-dom": "^19.2.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^7.2.6",
-    "zstddec": "0.1.0"
+    "zstddec": "0.1.0",
+    "zustand": "^5.0.15"
   },
   "allowScripts": {
     "electron@39.8.10": true,

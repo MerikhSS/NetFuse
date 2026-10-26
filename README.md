@@ -66,11 +66,11 @@ How much faster depends on your networks: each one adds speed only if it has its
 
 ### Windows
 
-1. Download **`netfuse-<version>-setup.exe`** from the [latest release](https://github.com/MerikhSS/NetFuse/releases/latest).
-2. Run it, and choose where to install NetFuse.
+1. Download the installer from the [latest release](https://github.com/MerikhSS/NetFuse/releases/latest): **`netfuse-<version>-x64-setup.exe`** for most PCs, or **`-arm64-setup.exe`** for ARM ones (Settings › System › About says which, under "System type").
+2. Run it, and choose where to install NetFuse. Picking a drive installs into a NetFuse folder on it.
 3. Open NetFuse from the Start menu or the desktop, and log in to Steam.
 
-One installer covers both regular (x64) and ARM PCs. It isn't code-signed yet, so Windows may say "Windows protected your PC": click **More info**, then **Run anyway**.
+The installer isn't code-signed yet, so Windows may say "Windows protected your PC": click **More info**, then **Run anyway**.
 
 ### macOS and Linux
 
@@ -91,7 +91,7 @@ npm run dev
 
 | System  | Command               | Creates                                     |
 | ------- | --------------------- | ------------------------------------------- |
-| Windows | `npm run build:win`   | An installer for x64 and ARM64              |
+| Windows | `npm run build:win`   | Installers for x64 and ARM64                |
 | macOS   | `npm run build:mac`   | `.dmg` packages for Apple silicon and Intel |
 | Linux   | `npm run build:linux` | AppImage, `.deb`, `.rpm` and `.tar.gz`      |
 
