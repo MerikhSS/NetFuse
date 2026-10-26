@@ -10,6 +10,21 @@
 
   root.NetFuseChangelog = [
     {
+      version: 'v0.3.0',
+      items: [
+        {
+          kind: 'improved',
+          title: 'Half the download on Windows',
+          text: 'There’s now an installer for each kind of PC: 124 MB for most PCs and 118 MB for ARM ones, instead of 251 MB for both together. The app is smaller on every system too.'
+        },
+        {
+          kind: 'improved',
+          title: 'Installing to another drive',
+          text: 'Choosing a drive such as D:\\ in the installer now installs into a NetFuse folder on it, with no folder to make yourself.'
+        }
+      ]
+    },
+    {
       version: 'v0.2.0',
       items: [
         {
