@@ -25,15 +25,23 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/library.png" alt="The Steam library: every owned game by its picture, one of them downloading">
+  <img src="docs/screenshots/library.webp" alt="The Steam library: every owned game by its picture, with what's installed ticked">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/game.png" width="49%" alt="A game's page: its branch, system, depots, sizes, folder and networks">
-  <img src="docs/screenshots/downloading.png" width="49%" alt="A game downloading over Wi-Fi and an iPhone's USB tethering at once">
+  <img src="docs/screenshots/game.webp" width="49%" alt="ARC Raiders' page: its branch, system, depots, sizes, folder and networks">
+  <img src="docs/screenshots/downloading.png" width="49%" alt="ARC Raiders downloading over Ethernet and Wi-Fi at once">
 </p>
 
-<p align="center"><sub>Shown with sample games from the test suite.</sub></p>
+## Faster than Steam alone
+
+<p align="center">
+  <img src="docs/screenshots/speed.png" alt="ARC Raiders, 55.8 GB on the same computer: Steam's own download at 2.9 MB/s with 5 hours 20 minutes left, and NetFuse over Ethernet and Wi-Fi at 6.5 MB/s with 2 hours 35 minutes left">
+</p>
+
+Steam downloads a game over one connection. NetFuse uses every network you pick. Here, over Ethernet and Wi-Fi, ARC Raiders downloaded at 6.5 MB/s against Steam's 2.9 MB/s: about twice as fast, with 2 h 35 m left instead of 5 h 20 m.
+
+How much faster depends on your networks: each one adds speed only if it has its own internet connection (see [Troubleshooting](#troubleshooting)).
 
 ## What it does
 
