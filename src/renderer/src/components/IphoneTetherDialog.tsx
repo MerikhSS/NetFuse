@@ -1,6 +1,7 @@
 import type { IphoneTetherState } from '@shared/types'
+import { cn } from 'cn'
 import { Smartphone } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,16 +12,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from './ui/alert-dialog'
-import { Button } from './ui/button'
+import { Button, buttonVariants } from './ui/button'
 
 /** On Windows, an iPhone plugged in that isn't a network yet (see main/network/iphone.ts): what
  * it takes, with the way to Apple's app that brings the driver. Said once each time it's plugged
- * in, and gone by itself once the iPhone is a network. */
+ * in, gone by itself once the iPhone is a network, and never again once asked (a setting, which
+ * stops main looking). */
 export function IphoneTetherDialog(): React.JSX.Element {
   const [state, setState] = useState<IphoneTetherState>({ status: 'none' })
   const [dismissed, setDismissed] = useState(false)
   // Kept from the last time it showed, so the steps don't change while it fades out.
   const [driverInstalled, setDriverInstalled] = useState(false)
+  // Focused first rather than Never show again, which is first in the footer: Enter mustn't
+  // turn the popup off for good.
+  const safeButton = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     let current = true
@@ -48,7 +53,7 @@ export function IphoneTetherDialog(): React.JSX.Element {
         if (!open) setDismissed(true)
       }}
     >
-      <AlertDialogContent className="sm:max-w-md">
+      <AlertDialogContent className="sm:max-w-md" initialFocus={safeButton}>
         <AlertDialogHeader>
           <div className="mb-1 flex size-9 items-center justify-center rounded-full bg-[var(--color-usb-bg)] text-[var(--color-usb-text)]">
             <Smartphone aria-hidden className="size-4.5" />
@@ -75,11 +80,18 @@ export function IphoneTetherDialog(): React.JSX.Element {
           </li>
         </ol>
         <AlertDialogFooter>
+          {/* Apart from the others, so it isn't hit for one of them. */}
+          <AlertDialogCancel
+            className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'mr-auto')}
+            onClick={() => void window.netfuse.updateSettings({ iphoneTetherPopup: false })}
+          >
+            Never show again
+          </AlertDialogCancel>
           {driverInstalled ? (
-            <AlertDialogAction>Got it</AlertDialogAction>
+            <AlertDialogAction ref={safeButton}>Got it</AlertDialogAction>
           ) : (
             <>
-              <AlertDialogCancel>Not now</AlertDialogCancel>
+              <AlertDialogCancel ref={safeButton}>Not now</AlertDialogCancel>
               {/* Stays open: the steps after the install are still to do. */}
               <Button size="sm" onClick={() => void window.netfuse.openAppleDevices()}>
                 Get Apple Devices

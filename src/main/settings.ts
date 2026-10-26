@@ -88,6 +88,7 @@ function sanitizeSettings(parsed: unknown): AppSettings {
   if (parsed.speedUnit === 'bytes' || parsed.speedUnit === 'bits') {
     settings.speedUnit = parsed.speedUnit
   }
+  if (parsed.iphoneTetherPopup === false) settings.iphoneTetherPopup = false
   return settings
 }
 

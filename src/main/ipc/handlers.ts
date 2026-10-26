@@ -195,6 +195,8 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Down
       window.webContents.send(IpcChannels.iphoneTetherChanged, state)
     }
   })
+  // Off until the settings say whether "Never show again" was chosen.
+  void loadSettings().then((settings) => iphone.setEnabled(settings.iphoneTetherPopup !== false))
   handle('iphoneTether', () => iphone.current)
   handle('openAppleDevices', () => openAppleDevices())
 
@@ -216,7 +218,9 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Down
     }
     await saveSettings(patch)
     // Read back rather than taken from the patch: what was saved is what passed the checks.
-    await manager.applySettings(await loadSettings())
+    const settings = await loadSettings()
+    iphone.setEnabled(settings.iphoneTetherPopup !== false)
+    await manager.applySettings(settings)
   })
 
   // Answered via sendSync from the preload, which blocks the page until returnValue is set — so a

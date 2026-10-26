@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import type { Locator } from '@playwright/test'
 import { expect, test, type NetFuseApp } from './fixtures'
 
 // An iPhone plugged into Windows that isn't a network: the popup that says how, driven through the
@@ -16,6 +19,13 @@ function plug(
     process.env.NETFUSE_E2E_IPHONE = value
   }, state)
 }
+
+/** The popup while it's open, rather than while it's in the page: closed, it stays there to fade
+ * out, which a window that's never shown doesn't finish. */
+const popupOf = (netfuse: NetFuseApp): Locator =>
+  netfuse.page
+    .getByRole('alertdialog', { name: 'Use your iPhone as a network' })
+    .and(netfuse.page.locator('[data-open]'))
 
 /** Links the app opens, kept instead of opened. */
 async function recordLinks(netfuse: NetFuseApp): Promise<() => Promise<string[]>> {
@@ -37,11 +47,7 @@ test('an iPhone that isn’t a network gets a popup with the way to Apple Device
   await serveSteam()
   const links = await recordLinks(netfuse)
   const page = netfuse.page
-  // Open, rather than in the page: closed, it stays there to fade out, which a window that's
-  // never shown doesn't finish.
-  const popup = page
-    .getByRole('alertdialog', { name: 'Use your iPhone as a network' })
-    .and(page.locator('[data-open]'))
+  const popup = popupOf(netfuse)
 
   // Not over the login, where it would take the keyboard from a password.
   await plug(netfuse, 'no-driver')
@@ -56,6 +62,8 @@ test('an iPhone that isn’t a network gets a popup with the way to Apple Device
 
   await netfuse.loginSteam()
   await expect(popup).toBeVisible()
+  // Enter mustn't turn it off for good.
+  await expect(popup.getByRole('button', { name: 'Not now' })).toBeFocused()
   await expect(popup.getByRole('listitem')).toHaveCount(3)
   await expect(popup.getByRole('listitem').first()).toContainText('Install Apple Devices')
   await popup.getByRole('button', { name: 'Get Apple Devices' }).click()
@@ -86,4 +94,27 @@ test('an iPhone that isn’t a network gets a popup with the way to Apple Device
   await expect.poll(() => netfuse.api.iphoneTether()).toEqual({ status: 'none' })
   await plug(netfuse, 'no-driver')
   await expect(popup).toBeVisible()
+})
+
+test('Never show again keeps it away, across restarts', async ({ netfuse, serveSteam, dirs }) => {
+  await serveSteam()
+  await netfuse.loginSteam()
+  const popup = popupOf(netfuse)
+  await plug(netfuse, 'no-driver')
+  await expect(popup).toBeVisible()
+  await popup.getByRole('button', { name: 'Never show again' }).click()
+  await expect(popup).toBeHidden()
+  await expect.poll(() => netfuse.api.iphoneTether()).toEqual({ status: 'none' })
+  const settings = JSON.parse(await readFile(join(dirs.userData, 'app-settings.json'), 'utf8'))
+  expect(settings).toMatchObject({ iphoneTetherPopup: false })
+
+  // Plugged in again, then after a restart: nothing, for longer than it would take to show.
+  await plug(netfuse, 'unplugged')
+  await plug(netfuse, 'no-driver')
+  await netfuse.page.waitForTimeout(3000)
+  expect(await netfuse.api.iphoneTether()).toEqual({ status: 'none' })
+  await netfuse.relaunch()
+  await plug(netfuse, 'no-driver')
+  await netfuse.page.waitForTimeout(3000)
+  expect(await netfuse.api.iphoneTether()).toEqual({ status: 'none' })
 })
