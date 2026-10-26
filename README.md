@@ -19,7 +19,6 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-preview-orange" alt="Preview">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-black" alt="macOS, Windows and Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
 </p>
