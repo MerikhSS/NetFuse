@@ -136,17 +136,44 @@ test.describe('steam credentials', () => {
     ]) {
       expect(output.includes(bytes), `the output never has the ${name}`).toBe(false)
     }
-    for (const file of await filesUnder(dirs.userData)) {
-      if ((await stat(file)).size > 64 * 1024 * 1024) continue
-      const data = await readFile(file)
+    const noSecretIn = (file: string, data: Buffer): void => {
       for (const { name, bytes } of secrets) {
         expect(data.includes(bytes), `${file} never has the ${name}`).toBe(false)
       }
+    }
+    // Windows keeps some of Chromium's own files locked while the app runs: those are read once
+    // it has quit.
+    const locked: string[] = []
+    for (const file of await filesUnder(dirs.userData)) {
+      if ((await stat(file)).size > 64 * 1024 * 1024) continue
+      const data = await readFile(file).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'EBUSY') throw error
+        locked.push(file)
+        return null
+      })
+      if (data) noSecretIn(file, data)
     }
 
     await netfuse.api.steamLogout()
     expect((await netfuse.api.steamLoginState()).status).toBe('logged-out')
     expect(existsSync(stored), 'logging out forgets the stored login').toBe(false)
+    if (locked.length > 0) {
+      await netfuse.quit()
+      // Chromium's helper processes can hold a file a moment after the app has gone; one it
+      // deleted as it quit (its lockfile) has nothing left to keep.
+      for (const file of locked) {
+        let data: Buffer | null | undefined
+        await expect
+          .poll(async () => {
+            data = await readFile(file).catch((error: NodeJS.ErrnoException) =>
+              error.code === 'ENOENT' ? null : undefined
+            )
+            return data !== undefined
+          })
+          .toBe(true)
+        if (data) noSecretIn(file, data)
+      }
+    }
   })
 
   test('a wrong password is said plainly, and nothing is kept @smoke', async ({

@@ -92,7 +92,13 @@ test('scheduled intent survives restart, while expiration stays blocked until di
 })
 
 test('a restart inside the window continues scheduled work', async ({ netfuse, serveSteam }) => {
-  const minute = new Date().getHours() * 60 + new Date().getMinutes()
+  // The schedule is in the app's local time, so the minute is asked of the app: worked out in a
+  // test process that took another time zone, it set a window that hadn't opened (seen on the
+  // Windows nightly), and the download waited for it.
+  const minute = await netfuse.evaluateMain(() => {
+    const now = new Date()
+    return now.getHours() * 60 + now.getMinutes()
+  }, null)
   const open = { ...schedule, startMinute: (minute + 1420) % 1440, endMinute: (minute + 20) % 1440 }
   await netfuse.api.updateSettings({ downloadSchedule: open })
   const steam = await serveSteam(syntheticApp(32, 3))
