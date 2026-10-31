@@ -23,7 +23,7 @@ test.describe('steam downloads', () => {
     // treeSha counts regular files only: the rest is checked here.
     const link = join(done.destinationPath, 'game.sh')
     expect((await lstat(link)).isSymbolicLink()).toBe(true)
-    expect(await readlink(link)).toBe('bin/game')
+    expect(await readlink(link)).toBe(process.platform === 'win32' ? 'bin\\game' : 'bin/game')
     if (process.platform !== 'win32') {
       expect((await stat(join(done.destinationPath, 'bin/game'))).mode & 0o111).not.toBe(0)
       expect((await stat(join(done.destinationPath, 'extras/art.bin'))).mode & 0o111).toBe(0)

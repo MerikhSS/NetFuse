@@ -28,6 +28,11 @@ import type { SteamLayout } from './layout'
 /** Files kept open at once. */
 const OPEN_FILES = 64
 
+/** A link's target as it's written here. The layout's use '/'; a Windows link takes '\\', and
+ * gives it back so when read, so a link checked against the layout's form would never match. */
+const diskTarget = (target: string): string =>
+  process.platform === 'win32' ? target.split('/').join('\\') : target
+
 interface OpenFile {
   handle: Promise<FileHandle>
   /** Writes under way through it: it isn't closed while any is. */
@@ -98,7 +103,9 @@ export class SteamDestination {
       if (file.kind === 'directory') continue
       const info = await lstat(path).catch(() => null)
       if (file.kind === 'symlink') {
-        if (info?.isSymbolicLink() && (await readlink(path)) === file.linkTarget) continue
+        if (info?.isSymbolicLink() && (await readlink(path)) === diskTarget(file.linkTarget!)) {
+          continue
+        }
         if (info)
           throw new Error(
             `${file.path} in the install folder is in the way of a link the game needs.`
@@ -146,7 +153,7 @@ export class SteamDestination {
 
   private async makeLink(path: string, target: string): Promise<void> {
     try {
-      await symlink(process.platform === 'win32' ? target.split('/').join('\\') : target, path)
+      await symlink(diskTarget(target), path)
     } catch (error) {
       if (process.platform === 'win32' && (error as NodeJS.ErrnoException).code === 'EPERM') {
         throw new Error(

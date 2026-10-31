@@ -20,6 +20,16 @@ const library = (netfuse: NetFuseApp): Locator =>
 const nav = (netfuse: NetFuseApp, name: string): Locator =>
   netfuse.page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name, exact: true })
 
+/** Starts the download from a game's page. On Windows the test game's links bring a warning
+ * first (see steam/prepare.ts), and it's started anyway. */
+async function clickDownload(netfuse: NetFuseApp): Promise<void> {
+  await netfuse.page.getByRole('button', { name: 'Download', exact: true }).click()
+  if (process.platform === 'win32') {
+    await expect(netfuse.page.getByText(/This game has symbolic links/)).toBeVisible()
+    await netfuse.page.getByRole('button', { name: 'Download anyway' }).click()
+  }
+}
+
 /** Opens a game's page from the library, as clicking its picture does. */
 async function openGame(netfuse: NetFuseApp, name: string): Promise<void> {
   await library(netfuse).getByRole('button', { name }).click()
@@ -80,7 +90,7 @@ test.describe('the window', () => {
 
     await page.getByRole('button', { name: 'Change' }).click()
     await netfuse.expectNextDownload(steam.expectedSha())
-    await page.getByRole('button', { name: 'Download', exact: true }).click()
+    await clickDownload(netfuse)
 
     // Started: its own screen opens.
     await expect(page.getByRole('table', { name: 'Networks' })).toBeVisible()
@@ -253,7 +263,7 @@ test.describe('the window', () => {
       destBefore: await readdir(common),
       destinationDir: common
     }
-    await page.getByRole('button', { name: 'Download', exact: true }).click()
+    await clickDownload(netfuse)
     const done = await netfuse.waitForSteamStatus('completed')
     expect(done.destinationPath).toBe(join(common, 'NetFuse Test Game'))
     expect(done.adopted).toBe(true)
