@@ -10,6 +10,16 @@
 
   root.NetFuseChangelog = [
     {
+      version: 'v0.3.1',
+      items: [
+        {
+          kind: 'fixed',
+          title: 'Games with links on Windows',
+          text: 'On Windows, a game whose files include links (shortcuts to other files in it) failed just as it finished, saying a file was in the way of a link. It now installs.'
+        }
+      ]
+    },
+    {
       version: 'v0.3.0',
       items: [
         {
