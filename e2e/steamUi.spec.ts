@@ -77,7 +77,7 @@ test.describe('the window', () => {
       depots.getByRole('checkbox', { name: /^NetFuse Test Game Content Depot/ })
     ).toBeChecked()
     await expect(
-      depots.getByRole('checkbox', { name: /^NetFuse Test Game DLC Depot/ })
+      depots.getByRole('checkbox', { name: /^NetFuse Test Game: Season Pass Depot/ })
     ).toBeChecked()
     // Not owned: offered as such, and not picked.
     await expect(

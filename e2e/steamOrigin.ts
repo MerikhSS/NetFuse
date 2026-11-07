@@ -68,6 +68,9 @@ export interface SteamDepotFixture {
   files: FixtureFile[]
   owned: boolean
   dlcAppId?: number
+  /** Left out of the app's appinfo, as most depots are now: a DLC's is named after its DLC, whose
+   * appinfo carries `name`. */
+  unnamed?: boolean
   encryptNames?: boolean
   compression?: (index: number) => Compression
 }
@@ -138,7 +141,8 @@ export function syntheticApp(seed = 1, scale = 1): SteamAppFixture {
       },
       {
         depotId: 4004,
-        name: 'NetFuse Test Game DLC',
+        name: 'NetFuse Test Game: Season Pass',
+        unnamed: true,
         manifestId: '7000000000000000004',
         key: keyFor(seed, 4),
         owned: true,
@@ -401,7 +405,7 @@ export class SteamOrigin {
         0
       )
       depots[String(depot.depotId)] = {
-        name: depot.name,
+        ...(depot.unnamed ? {} : { name: depot.name }),
         manifests: {
           public: { gid: depot.manifestId, size: String(size), download: String(download) }
         },
@@ -535,6 +539,8 @@ export class SteamOrigin {
       const packages = (body.packages as number[] | undefined) ?? []
       const appinfo = (appId: number): unknown => {
         if (appId === this.app.appId) return this.appinfo()
+        const dlc = this.app.depots.find((depot) => depot.dlcAppId === appId)
+        if (dlc) return { common: { name: dlc.name, type: 'DLC' }, depots: {} }
         const other = others.find((entry) => entry.appId === appId)
         return other && { common: { name: other.name, type: other.type ?? 'Game' }, depots: {} }
       }

@@ -4,7 +4,9 @@ import {
   currentSystem,
   defaultDepots,
   defaultLanguage,
+  depotNameSources,
   depotUnavailable,
+  nameDepots,
   readAppInfo
 } from '../src/main/steam/appInfo'
 import { languageName } from '../src/shared/steamSelection'
@@ -87,7 +89,45 @@ test.describe('steam appinfo', () => {
     expect(byId.get(489)!.encryptedBranches).toEqual(['secret'])
     // Another realm's depot is never offered.
     expect(byId.get(490)!.manifests).toEqual({})
-    expect(byId.get(483)!.name).toBe('Depot 483')
+    // A depot of the app's own with no name takes the app's.
+    expect(byId.get(483)!.name).toBe('Spacewar')
+  })
+
+  test('a DLC’s depot is named after the DLC, a shared one after its name where it comes from', () => {
+    const details = readAppInfo(480, APPINFO)
+    const byId = new Map(details.depots.map((depot) => [depot.depotId, depot]))
+    // Until then they go by their numbers, and are what's asked about.
+    expect(byId.get(486)!.name).toBe('Depot 486')
+    expect(byId.get(487)!.name).toBe('Depot 487')
+    expect(depotNameSources(details).sort((a, b) => a - b)).toEqual([999, 228980])
+
+    nameDepots(details, {
+      '999': { common: { name: 'Spacewar: Season 08 - Expansion Pass', type: 'DLC' } },
+      '228980': {
+        common: { name: 'Steamworks Common Redistributables' },
+        depots: { '487': { name: 'VC 2022 Redist' } }
+      }
+    })
+    expect(byId.get(486)!.name).toBe('Spacewar: Season 08 - Expansion Pass')
+    expect(byId.get(487)!.name).toBe('VC 2022 Redist')
+    // Named, they aren't asked about again; a depot that had a name keeps it.
+    expect(depotNameSources(details)).toEqual([])
+    expect(byId.get(481)!.name).toBe('Spacewar Content')
+  })
+
+  test('a depot keeps its number when Steam has no name for it', () => {
+    const details = readAppInfo(480, APPINFO)
+    const byId = new Map(details.depots.map((depot) => [depot.depotId, depot]))
+    nameDepots(details, {})
+    expect(byId.get(486)!.name).toBe('Depot 486')
+    // A shared depot the source app doesn't name takes the source app's name.
+    nameDepots(details, { '228980': { common: { name: 'Steamworks Common Redistributables' } } })
+    expect(byId.get(487)!.name).toBe('Steamworks Common Redistributables')
+    // Whatever stands in for a name, nothing but a string is taken.
+    const other = readAppInfo(480, APPINFO)
+    nameDepots(other, { '999': { common: { name: { evil: true } } }, '228980': 'nonsense' })
+    expect(other.depots.find((depot) => depot.depotId === 486)!.name).toBe('Depot 486')
+    expect(other.depots.find((depot) => depot.depotId === 487)!.name).toBe('Depot 487')
   })
 
   test('the default depots are the ones Steam would install here', () => {

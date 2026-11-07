@@ -78,6 +78,9 @@ function manifestOf(value: unknown): SteamDepotManifest | undefined {
 /** Branch names are short identifiers; anything else is refused rather than shown or sent. */
 export const isBranchName = (name: string): boolean => /^[\w.-]{1,64}$/.test(name)
 
+/** What a depot is called while nothing better is known: its number. */
+const unnamed = (depotId: number): string => `Depot ${depotId}`
+
 function readDepot(depotId: number, node: Node): SteamDepot {
   const config = asNode(node.config) ?? {}
   const manifests: Record<string, SteamDepotManifest> = {}
@@ -89,7 +92,7 @@ function readDepot(depotId: number, node: Node): SteamDepot {
   const language = asString(config.language)?.trim().toLowerCase()
   const depot: SteamDepot = {
     depotId,
-    name: (asString(node.name) ?? '').slice(0, 200) || `Depot ${depotId}`,
+    name: (asString(node.name) ?? '').slice(0, 200) || unnamed(depotId),
     oslist: osList(config.oslist),
     lowViolence: asFlag(config.lowviolence),
     sharedInstall: asFlag(node.sharedinstall),
@@ -146,6 +149,14 @@ export function readAppInfo(appId: number, appinfo: unknown): SteamAppDetails {
     if (depotId !== undefined && node) depots.push(readDepot(depotId, node))
   }
   const name = (asString(common.name) ?? '').slice(0, 200) || `App ${appId}`
+  // Most depots carry no name of their own now. The app's own hold its content, and take its
+  // name; a DLC's and a shared one's are named after the apps they come from (see nameDepots).
+  if (asString(common.name)) {
+    for (const depot of depots) {
+      if (depot.name !== unnamed(depot.depotId)) continue
+      if (depot.dlcAppId === undefined && depot.sharedFrom === undefined) depot.name = name
+    }
+  }
   const packs = depots.flatMap((depot) => (depot.language ? [depot.language] : []))
   // The content depots that name no language are in the app's base languages: English, unless
   // appinfo says otherwise. A game whose language depots are only the other languages has its
@@ -168,6 +179,36 @@ export function readAppInfo(appId: number, appinfo: unknown): SteamAppDetails {
     branches: readBranches(asNode(depotsNode.branches)),
     depots,
     languages
+  }
+}
+
+/** The apps whose appinfo names `details`' depots still unnamed: the DLCs they belong to, and the
+ * apps the shared ones come from (Steam's redistributables). */
+export function depotNameSources(details: SteamAppDetails): number[] {
+  const ids = new Set<number>()
+  for (const depot of details.depots) {
+    const source = depot.dlcAppId ?? depot.sharedFrom
+    if (depot.name === unnamed(depot.depotId) && source !== undefined) ids.add(source)
+  }
+  return [...ids]
+}
+
+/** Names `details`' unnamed depots from `sources`, appinfo by app id (see depotNameSources): a
+ * DLC's depot after the DLC ("Stellaris: Season 08 - Expansion Pass"), a shared one after its
+ * name in the app it comes from, else that app's. One with no name to be found keeps its number. */
+export function nameDepots(details: SteamAppDetails, sources: Record<string, unknown>): void {
+  const nameOf = (value: unknown): string | undefined =>
+    (asString(value) ?? '').trim().slice(0, 200) || undefined
+  for (const depot of details.depots) {
+    if (depot.name !== unnamed(depot.depotId)) continue
+    if (depot.dlcAppId !== undefined) {
+      const dlc = asNode(sources[String(depot.dlcAppId)])
+      depot.name = nameOf(asNode(dlc?.common)?.name) ?? depot.name
+    } else if (depot.sharedFrom !== undefined) {
+      const app = asNode(sources[String(depot.sharedFrom)])
+      const own = asNode(asNode(app?.depots)?.[String(depot.depotId)])
+      depot.name = nameOf(own?.name) ?? nameOf(asNode(app?.common)?.name) ?? depot.name
+    }
   }
 }
 

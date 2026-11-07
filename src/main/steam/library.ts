@@ -1,6 +1,12 @@
 import type { SteamAppDetails, SteamOwnedApp } from '../../shared/steam'
 import type { SteamAccount } from './account'
-import { readAppInfo, readArtPaths, type SteamArtPaths } from './appInfo'
+import {
+  depotNameSources,
+  nameDepots,
+  readAppInfo,
+  readArtPaths,
+  type SteamArtPaths
+} from './appInfo'
 import type { SteamSession } from './backend'
 
 // What the logged-in account owns, and what an app is made of. Ownership comes from the account's
@@ -141,6 +147,17 @@ export class SteamLibrary {
       const borrowed = depots.get(depot.depotId)
       depot.owned = borrowed !== undefined
       if (borrowed) depot.borrowed = true
+    }
+    const sources = depotNameSources(details)
+    try {
+      const appinfo: Record<string, unknown> = {}
+      for (const batch of chunked(sources, APPS_PER_REQUEST)) {
+        const named = await session.productInfo(batch, [])
+        for (const [id, entry] of Object.entries(named.apps)) appinfo[id] = entry.appinfo
+      }
+      nameDepots(details, appinfo)
+    } catch {
+      // Only names: without them, those depots go by their numbers.
     }
     return details
   }
