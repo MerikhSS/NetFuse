@@ -10,6 +10,16 @@
 
   root.NetFuseChangelog = [
     {
+      version: 'v0.3.2',
+      items: [
+        {
+          kind: 'improved',
+          title: 'Depots by name',
+          text: 'A game’s page names each depot instead of giving its number: a DLC’s after the DLC (“Stellaris: Season 08 - Expansion Pass” rather than “Depot 2863190”), a shared one after its redistributable, and the game’s own after the game.'
+        }
+      ]
+    },
+    {
       version: 'v0.3.1',
       items: [
         {
