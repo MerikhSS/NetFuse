@@ -7,12 +7,14 @@ import {
   type LoginResult,
   type RawContentServer,
   type RawProductInfo,
+  type RawWorkshopPage,
   type SteamBackend,
   type SteamLicense,
   type SteamSession
 } from './backend'
-import { contentMessage, eresultOf, loginExpired, loginMessage } from './eresult'
+import { contentMessage, EResult, eresultOf, loginExpired, loginMessage } from './eresult'
 import { redactedMessage } from './redact'
+import type { RawWorkshopQuery } from './workshop'
 
 // Steam itself, through steam-session (logging in) and steam-user (the Steam client protocol: what
 // the account owns, appinfo, depot keys, manifest request codes, content servers, CDN tokens). The
@@ -30,14 +32,23 @@ const LOGIN_TIMEOUT_MS = 5 * 60_000
 const REQUEST_TIMEOUT_MS = 60_000
 const LOGON_TIMEOUT_MS = 30_000
 
+/** EMsg.ServiceMethodCallFromClient: a Steamworks service call. */
+const SERVICE_METHOD_CALL = 151
+/** EPublishedFileInfoMatchingFileType.Items: a Workshop's items, not its collections or guides. */
+const WORKSHOP_ITEMS = 0
+const EResultOK = 1
+
 /** ELicenseFlags. */
 const LICENSE_EXPIRED = 8
 const LICENSE_BORROWED = 16384
 
 type SessionModule = typeof import('steam-session')
+type SchemaModule = typeof import('steam-user/protobufs/generated/_load.js')
+type ProtoMessage = SchemaModule[string]
 
 let sessionModule: Promise<SessionModule> | null = null
 let userModule: Promise<typeof SteamUserType> | null = null
+let schemaModule: Promise<SchemaModule> | null = null
 
 /** A CommonJS package through import(): its exports come as `default`, or as named exports, by how
  * Node read it. */
@@ -53,6 +64,14 @@ function loadSession(): Promise<SessionModule> {
 function loadUser(): Promise<typeof SteamUserType> {
   userModule ??= import('steam-user').then((module) => module.default)
   return userModule
+}
+
+/** steam-user's message types, for the service calls it has no wrapper for. */
+function loadSchema(): Promise<SchemaModule> {
+  schemaModule ??= import('steam-user/protobufs/generated/_load.js').then((module) =>
+    exportsOf(module as unknown as SchemaModule)
+  )
+  return schemaModule
 }
 
 function within<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
@@ -200,6 +219,93 @@ class Session implements SteamSession {
     } catch (error) {
       throw new SteamRefusedError(contentMessage(eresultOf(error), depotId), eresultOf(error))
     }
+  }
+
+  async queryWorkshop(query: RawWorkshopQuery): Promise<RawWorkshopPage> {
+    const schema = await loadSchema()
+    const body = await this.service(
+      'PublishedFile.QueryFiles#1',
+      schema.CPublishedFile_QueryFiles_Request,
+      schema.CPublishedFile_QueryFiles_Response,
+      {
+        query_type: query.queryType,
+        cursor: query.cursor,
+        numperpage: query.perPage,
+        appid: query.appId,
+        search_text: query.searchText,
+        days: query.days,
+        filetype: WORKSHOP_ITEMS,
+        return_details: true,
+        return_tags: true,
+        return_short_description: true,
+        strip_description_bbcode: true
+      }
+    )
+    const items = Array.isArray(body.publishedfiledetails) ? body.publishedfiledetails : []
+    const next = typeof body.next_cursor === 'string' ? body.next_cursor : ''
+    return {
+      total: Number(body.total ?? 0) || 0,
+      items,
+      // The last page points back at itself.
+      nextCursor: items.length > 0 && next && next !== query.cursor ? next : undefined
+    }
+  }
+
+  async workshopDetails(ids: string[]): Promise<unknown[]> {
+    try {
+      const { files } = await within(
+        this.client.getPublishedFileDetails(ids),
+        REQUEST_TIMEOUT_MS,
+        'Steam didn’t send the Workshop item’s details in time.'
+      )
+      return Object.values(files)
+    } catch (error) {
+      throw new SteamRefusedError(redactedMessage(error), eresultOf(error))
+    }
+  }
+
+  /**
+   * A Steamworks service call steam-user has no wrapper for. It is sent as steam-user's own
+   * wrappers send theirs (the table of message types they look in is private to it), and the
+   * answer, which steam-user then passes on undecoded, is decoded here. steam-user is pinned to
+   * an exact version, so what this reaches into doesn't move under it.
+   */
+  private service(
+    method: string,
+    request: ProtoMessage,
+    response: ProtoMessage,
+    data: object
+  ): Promise<Record<string, unknown>> {
+    return within(
+      new Promise((resolve, reject) => {
+        this.client._send(
+          { msg: SERVICE_METHOD_CALL, proto: { target_job_name: method } },
+          Buffer.from(request.encode(data).finish()),
+          (body, header) => {
+            const eresult = header?.proto?.eresult
+            if (eresult !== undefined && eresult !== EResultOK) {
+              reject(
+                new SteamRefusedError(
+                  eresult === EResult.RateLimitExceeded
+                    ? 'Steam is limiting requests from this account. Wait a while and try again.'
+                    : loginMessage(eresult, 'Steam wouldn’t list this Workshop.'),
+                  eresult
+                )
+              )
+              return
+            }
+            try {
+              const bytes = Buffer.isBuffer(body) ? body : body.toBuffer()
+              resolve(response.toObject(response.decode(bytes), { longs: String }))
+            } catch (error) {
+              reject(error)
+            }
+          }
+        )
+      }),
+      REQUEST_TIMEOUT_MS,
+      'Steam didn’t answer in time.'
+    )
   }
 
   async contentServers(appId: number): Promise<RawContentServer[]> {

@@ -2,6 +2,7 @@ import type { SteamAppDetails, SteamOwnedApp } from '../../shared/steam'
 import type { SteamAccount } from './account'
 import {
   depotNameSources,
+  hasWorkshop,
   nameDepots,
   readAppInfo,
   readArtPaths,
@@ -115,7 +116,13 @@ export class SteamLibrary {
           const type = String(common?.type ?? '').toLowerCase()
           const name = typeof common?.name === 'string' ? common.name.slice(0, 200) : ''
           if (!name || !LISTED_TYPES.has(type) || !asRecord(appinfo?.depots)) continue
-          listed.push({ appId, name, type, borrowed: apps.get(appId) ?? false })
+          listed.push({
+            appId,
+            name,
+            type,
+            borrowed: apps.get(appId) ?? false,
+            workshop: hasWorkshop(appinfo)
+          })
           this.art.set(appId, readArtPaths(appinfo))
         }
       }

@@ -62,6 +62,8 @@ export interface SteamAppDetails {
   /** Every language it can be installed in, sorted: those of its language depots, and those its
    * other depots are in (its base languages, usually English). */
   languages: string[]
+  /** The depot its Workshop items' files are in (see main/steam/workshop.ts). */
+  workshopDepot: number
 }
 
 export interface SteamOwnedApp {
@@ -71,6 +73,8 @@ export interface SteamOwnedApp {
   type: string
   /** The license is borrowed through Steam Family Sharing. */
   borrowed: boolean
+  /** It has a Steam Workshop, which the Workshop tab lists. */
+  workshop: boolean
 }
 
 /** What the user chose for an app: the default depots follow from it (see defaultDepots). */
@@ -122,6 +126,55 @@ export interface SteamPrepareRequest {
   destinationDir: string
   /** Install into `destinationDir/<folder>` that already exists: what is there and correct is
    * kept, and only what's missing or different is fetched. */
+  adopt: boolean
+}
+
+/** How a game's Workshop is listed, in Steam's own orders. */
+export type WorkshopSort = 'popular' | 'subscribed' | 'recent' | 'updated'
+
+export interface WorkshopQuery {
+  appId: number
+  sort: WorkshopSort
+  /** Words to look for: the items come in order of how well they match, whatever `sort`. */
+  search?: string
+  /** Where the page before ended (WorkshopPage.nextCursor); absent for the first. */
+  cursor?: string
+}
+
+/** A Workshop item, as the Workshop tab lists it. */
+export interface WorkshopItem {
+  /** Steam's id for it: a 64-bit number, in decimal. */
+  publishedFileId: string
+  /** The game it is for. */
+  appId: number
+  title: string
+  /** A few sentences, as plain text. */
+  description: string
+  /** Bytes, as Steam lists it. */
+  size: number
+  /** Seconds since the epoch. */
+  updatedAt: number
+  subscriptions: number
+  tags: string[]
+  /** Its files are on Steam's content servers, where NetFuse fetches them from. An item kept in
+   * Steam's old Workshop storage isn't. */
+  downloadable: boolean
+}
+
+export interface WorkshopPage {
+  items: WorkshopItem[]
+  /** How many match, as Steam counts them. */
+  total: number
+  /** Where the next page starts; absent after the last. */
+  nextCursor?: string
+}
+
+/** A Workshop item to download into a folder of the user's choosing. */
+export interface WorkshopPrepareRequest {
+  appId: number
+  publishedFileId: string
+  destinationDir: string
+  /** Update `destinationDir/<folder>` that already exists, as SteamPrepareRequest.adopt does. */
   adopt: boolean
 }
 

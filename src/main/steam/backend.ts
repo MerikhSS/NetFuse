@@ -1,8 +1,10 @@
+import type { RawWorkshopQuery } from './workshop'
+
 // Everything NetFuse asks of Steam itself, as opposed to the content servers: logging in, what the
-// account owns, apps' details, depot keys, manifest request codes, the content server list and
-// CDN tokens. steamUserBackend.ts answers it with steam-session and steam-user; the end-to-end
-// tests answer it with a fake (fakeBackend.ts), so everything past this seam — manifests and
-// chunks over NetFuse's own pinned connections — runs the same code in both.
+// account owns, apps' details, Workshop items, depot keys, manifest request codes, the content
+// server list and CDN tokens. steamUserBackend.ts answers it with steam-session and steam-user;
+// the end-to-end tests answer it with a fake (fakeBackend.ts), so everything past this seam —
+// manifests and chunks over NetFuse's own pinned connections — runs the same code in both.
 //
 // Secrets cross this seam (refresh tokens, depot keys, CDN tokens) and stay in the main process:
 // none of it is ever sent to the window, saved in the clear, or logged.
@@ -56,6 +58,13 @@ export interface RawContentServer {
   allowedAppIds?: number[]
 }
 
+/** A page of a Workshop, as Steam sends it: items' details unchecked (see workshop.ts). */
+export interface RawWorkshopPage {
+  total: number
+  items: unknown[]
+  nextCursor?: string
+}
+
 /** Steam refused something for a reason worth telling the user as it is (an EResult). */
 export class SteamRefusedError extends Error {
   constructor(
@@ -80,6 +89,10 @@ export interface SteamSession {
     branch: string
   ): Promise<string>
   contentServers(appId: number): Promise<RawContentServer[]>
+  /** A page of an app's Workshop, each item with its details (PublishedFile.QueryFiles). */
+  queryWorkshop(query: RawWorkshopQuery): Promise<RawWorkshopPage>
+  /** Workshop items' details, by published file id (PublishedFile.GetDetails). */
+  workshopDetails(ids: string[]): Promise<unknown[]>
   cdnAuthToken(
     appId: number,
     depotId: number,

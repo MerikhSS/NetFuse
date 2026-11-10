@@ -178,8 +178,15 @@ export function readAppInfo(appId: number, appinfo: unknown): SteamAppDetails {
     installDir: (asString(config.installdir) ?? '').trim(),
     branches: readBranches(asNode(depotsNode.branches)),
     depots,
-    languages
+    languages,
+    // Most apps keep their Workshop items in a depot numbered as the app; appinfo names another.
+    workshopDepot: asId(depotsNode.workshopdepot) ?? appId
   }
+}
+
+/** Whether an app has a Steam Workshop, from its appinfo. */
+export function hasWorkshop(appinfo: unknown): boolean {
+  return asFlag(asNode(asNode(appinfo)?.common)?.workshop_visible)
 }
 
 /** The apps whose appinfo names `details`' depots still unnamed: the DLCs they belong to, and the

@@ -66,7 +66,29 @@ declare module 'steam-user' {
       depotId: number,
       hostname: string
     ): Promise<{ token: string; expires: Date }>
+    getPublishedFileDetails(ids: string[]): Promise<{ files: Record<string, unknown> }>
+    /** Internal: sends a message, and calls back with the answer (undecoded when steam-user has
+     * no type for it). Used only for service calls steam-user has no wrapper for. */
+    _send(
+      header: { msg: number; proto: { target_job_name: string } },
+      body: Buffer,
+      callback: (
+        body: Buffer | { toBuffer(): Buffer },
+        header?: { proto?: { eresult?: number } }
+      ) => void
+    ): void
   }
 
   export = SteamUser
+}
+
+/** steam-user's protobuf message types (protobuf.js), by name. */
+declare module 'steam-user/protobufs/generated/_load.js' {
+  interface ProtoMessage {
+    encode(data: object): { finish(): Uint8Array }
+    decode(bytes: Uint8Array): object
+    toObject(message: object, options: { longs: StringConstructor }): Record<string, unknown>
+  }
+  const Schema: Record<string, ProtoMessage>
+  export = Schema
 }

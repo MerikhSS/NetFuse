@@ -5,11 +5,13 @@ import {
   type LoginResult,
   type RawContentServer,
   type RawProductInfo,
+  type RawWorkshopPage,
   type SteamBackend,
   type SteamLicense,
   type SteamSession
 } from './backend'
 import { contentMessage, loginExpired, loginMessage } from './eresult'
+import type { RawWorkshopQuery } from './workshop'
 
 // Steam, as the end-to-end tests stand it up (e2e/steamOrigin.ts): a local server answering what
 // steam-session and steam-user would ask the real one, so a Steam download can be driven from
@@ -160,6 +162,14 @@ class FakeSession implements SteamSession {
 
   contentServers(appId: number): Promise<RawContentServer[]> {
     return this.get(`/cm/servers?app=${appId}`)
+  }
+
+  queryWorkshop(query: RawWorkshopQuery): Promise<RawWorkshopPage> {
+    return call(this.base, '/cm/workshop/query', query, this.token)
+  }
+
+  workshopDetails(ids: string[]): Promise<unknown[]> {
+    return call(this.base, '/cm/workshop/details', { ids }, this.token)
   }
 
   cdnAuthToken(
