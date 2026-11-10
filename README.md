@@ -103,7 +103,7 @@ Each system's build runs on that system. Local builds are unsigned, so your syst
 - **No password is kept.** Your password and Steam Guard codes go to Steam once, and are never stored or logged.
 - **Staying logged in** keeps only Steam's login token, encrypted with your system's keychain. Without one (some Linux setups), nothing is stored, and you log in each time NetFuse starts.
 - **Secrets stay in the background.** The app's window never sees a token, password or depot key.
-- **No telemetry.** NetFuse talks only to Steam, the content servers Steam hands out, and Steam's store CDN for the games' pictures.
+- **No telemetry.** NetFuse talks only to Steam, the content servers Steam hands out, and Steam's store CDN and Workshop image servers for pictures.
 
 ## Status
 

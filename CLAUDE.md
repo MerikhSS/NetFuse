@@ -50,12 +50,13 @@ Electron, TypeScript and React desktop app. It downloads the Steam games an acco
 - **Window updates** carry only the grid cells that changed (`takeUpdate`, `shared/downloadUpdate.ts`), at most once every 200 ms.
 - **Persistence** lives under `userData/downloads/<id>/manifest.json` (format version 1). A checkpoint every 15 s calls `file.sync()` before saving progress.
 - **The window** (`src/renderer/src/App.tsx`) shows the Steam login until there is one; then a sidebar, the library (`LibraryScreen`), a game's page (`GameScreen`), and the downloads.
-- **Game pictures** come from Steam's store CDN through the main process, as `game-art://steam/<appId>/<kind>` (`steam/art.ts`), cached under `userData/art`. The renderer's CSP allows that scheme for images and nothing else.
+- **Game pictures** come from Steam's store CDN through the main process, as `game-art://steam/<appId>/<kind>` (`steam/art.ts`), cached under `userData/art`; a Workshop item's from Steam's Workshop image servers, as `game-art://workshop/<publishedFileId>`. The renderer's CSP allows that scheme for images and nothing else.
+- **The Workshop** (`steam/workshop.ts`): a game's items are listed with PublishedFile.QueryFiles over the same Steam connection. An item downloads as a Steam download of one depot (the game's Workshop depot, the item's manifest), into a folder of the user's choosing; `SteamDownloadState.workshop` marks it. NetFuse never subscribes or writes to Steam's own Workshop folder.
 - **`src/main/testKnobs.ts`** reads `NETFUSE_E2E_*` and `NETFUSE_USER_DATA`, and only in an unpackaged app.
 
 ## Tests
 
-- Playwright drives the real built app through `window.netfuse` (`e2e/fixtures.ts`), against a fake Steam (`e2e/steamOrigin.ts`): its control plane (login, licenses, appinfo, keys), two content servers, and the store CDN's pictures. A content server can damage, cut, stall or hold a response, return any status, or want a CDN token.
+- Playwright drives the real built app through `window.netfuse` (`e2e/fixtures.ts`), against a fake Steam (`e2e/steamOrigin.ts`): its control plane (login, licenses, appinfo, keys), two content servers, the store CDN's pictures, and a Workshop with items and their pictures. A content server can damage, cut, stall or hold a response, return any status, or want a CDN token.
 - **Automatic checks** run after every test:
   - a `completed` download matches its source byte for byte (`treeSha` of the install folder);
   - anything else leaves nothing of the install behind, and no open handle (`lsof`);
@@ -75,5 +76,6 @@ Design: `docs/steam/DESIGN.md`.
   - Only the refresh token is kept, encrypted with `safeStorage`, and not at all without a real keychain.
   - The renderer only ever sees the login state.
   - Every Steam error goes through `redact()`.
-- **Network calls.** Only to Steam endpoints, the content servers Steam hands out, and Steam's store CDN for game pictures. Manifests and chunks go through `StreamConnection` and `Limits`.
-- **Pure Steam modules** (crypto, codecs, manifest, layout, scheduler, cells, appinfo) stay free of `electron` and `testKnobs`, so they can be unit-tested.
+- **Network calls.** Only to Steam endpoints, the content servers Steam hands out, Steam's store CDN for game pictures, and Steam's Workshop image servers for Workshop items' pictures. Manifests and chunks go through `StreamConnection` and `Limits`.
+- **Owned games only, for the Workshop too.** Only the Workshops of games the account owns are listed or downloaded from.
+- **Pure Steam modules** (crypto, codecs, manifest, layout, scheduler, cells, appinfo, workshop) stay free of `electron` and `testKnobs`, so they can be unit-tested.

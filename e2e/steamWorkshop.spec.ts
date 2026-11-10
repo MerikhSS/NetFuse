@@ -21,6 +21,19 @@ const titles = async (
   query: Parameters<NetFuseApp['api']['steamWorkshop']>[0]
 ): Promise<string[]> => (await netfuse.api.steamWorkshop(query)).items.map((item) => item.title)
 
+/** Loads `src` as the window would show a picture: its width, or 0 when it doesn't load. */
+const loadPicture = (netfuse: NetFuseApp, src: string): Promise<number> =>
+  netfuse.page.evaluate(
+    (url) =>
+      new Promise<number>((resolve) => {
+        const image = new Image()
+        image.onload = () => resolve(image.naturalWidth)
+        image.onerror = () => resolve(0)
+        image.src = url
+      }),
+    src
+  )
+
 test.describe('the Steam Workshop', () => {
   test('a game’s Workshop is listed in Steam’s orders, and searched @smoke', async ({
     netfuse,
@@ -153,5 +166,25 @@ test.describe('the Steam Workshop', () => {
       })
     ).rejects.toThrow(/already up to date/)
     expect(steam.chunkRequests().length).toBe(before)
+  })
+
+  test('an item’s picture comes through the app, from Steam’s Workshop images, once', async ({
+    netfuse,
+    serveSteam
+  }) => {
+    const steam = await serveSteam()
+    await netfuse.loginSteam()
+    await netfuse.api.steamWorkshop({ appId: 4000, sort: 'popular' })
+    expect(await loadPicture(netfuse, `game-art://workshop/${SHIPS}`)).toBe(64)
+    // Kept on disk: asked for again, it isn't fetched again.
+    expect(await loadPicture(netfuse, `game-art://workshop/${SHIPS}?again`)).toBe(64)
+    expect(steam.workshopArtRequests).toEqual([SHIPS])
+    // One the listing hasn't seen is looked up; a made-up id is nothing.
+    await netfuse.relaunch()
+    await netfuse.loginSteam()
+    expect(await loadPicture(netfuse, `game-art://workshop/${LANES}`)).toBe(64)
+    expect(steam.workshopArtRequests).toEqual([SHIPS, LANES])
+    expect(await loadPicture(netfuse, 'game-art://workshop/0123')).toBe(0)
+    expect(await loadPicture(netfuse, 'game-art://workshop/..%2F..%2Fsecret')).toBe(0)
   })
 })
