@@ -10,6 +10,21 @@
 
   root.NetFuseChangelog = [
     {
+      version: 'v0.5.0',
+      items: [
+        {
+          kind: 'new',
+          title: 'The Steam Workshop',
+          text: 'A new Workshop tab lists the Workshop of every game you own that has one. Browse it by most popular, most subscribed, most recent or recently updated, or search it, and download mods, maps and more into a folder you pick, over every network at once. A game’s page has a Workshop button too. NetFuse doesn’t subscribe to items in Steam, so point the game at the folder the way it takes mods. Some older items, still in Steam’s old storage, are listed but can’t be downloaded.'
+        },
+        {
+          kind: 'new',
+          title: 'Workshops of games you don’t own on Steam',
+          text: 'Have a game on GOG or Epic instead? Turn on “Games you don’t own” in the Workshop, and NetFuse lists the games whose Workshop Steam lets anyone download, through Steam’s anonymous account, as SteamCMD’s “login anonymous” does: Garry’s Mod, RimWorld, Stellaris, Terraria, Project Zomboid and many more. Steam keeps some games’ Workshops to their owners, and those aren’t listed.'
+        }
+      ]
+    },
+    {
       version: 'v0.4.0',
       items: [
         {
