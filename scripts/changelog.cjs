@@ -10,6 +10,16 @@
 
   root.NetFuseChangelog = [
     {
+      version: 'v0.4.0',
+      items: [
+        {
+          kind: 'new',
+          title: 'The Steam Workshop',
+          text: 'A new Workshop tab lists the Workshop of every game you own that has one. Browse it by most popular, most subscribed, most recent or recently updated, or search it, and download mods, maps and more into a folder you pick, over every network at once. A game’s page has a Workshop button too. NetFuse doesn’t subscribe to items in Steam, so point the game at the folder the way it takes mods. Some older items, still in Steam’s old storage, are listed but can’t be downloaded.'
+        }
+      ]
+    },
+    {
       version: 'v0.3.2',
       items: [
         {
