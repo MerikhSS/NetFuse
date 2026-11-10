@@ -699,7 +699,7 @@ export class DownloadManager {
     const prepared = this.steam.planner.take(request.planId)
     if (!prepared) throw new Error('This choice has expired. Choose what to download again.')
     const { plan, layout, units } = prepared
-    const adopt = prepared.request.adopt === true
+    const adopt = prepared.adopt
     const destinationDir = plan.destinationDir
     await ensureDirectory(destinationDir)
     await ensureDiskSpace(destinationDir, Math.max(0, layout.installBytes - plan.presentBytes))
@@ -733,7 +733,9 @@ export class DownloadManager {
     const state: SteamDownloadState = {
       id,
       kind: 'steam',
-      url: `steam://app/${plan.appId}`,
+      url: prepared.workshop
+        ? `steam://url/CommunityFilePage/${prepared.workshop.publishedFileId}`
+        : `steam://app/${plan.appId}`,
       fileName: basename(folder),
       destinationPath: folder,
       totalBytes: plan.downloadBytes,
@@ -754,6 +756,7 @@ export class DownloadManager {
         buildId: prepared.buildId
       },
       depots: prepared.depots,
+      workshop: prepared.workshop,
       fileCount: plan.fileCount,
       installBytes: layout.installBytes,
       adopted: adopt || undefined,
@@ -768,7 +771,8 @@ export class DownloadManager {
       depots: prepared.depots.map(({ depotId, manifestId }) => ({ depotId, manifestId })),
       destinationDir,
       interfaceIds: request.interfaceIds,
-      streamsPerNetwork: request.streamsPerNetwork
+      streamsPerNetwork: request.streamsPerNetwork,
+      workshop: prepared.workshop && { publishedFileId: prepared.workshop.publishedFileId }
     }
     return this.newRuntime(
       state,

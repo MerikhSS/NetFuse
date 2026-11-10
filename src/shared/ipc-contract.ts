@@ -5,7 +5,10 @@ import type {
   SteamLoginState,
   SteamOwnedApp,
   SteamPlan,
-  SteamPrepareRequest
+  SteamPrepareRequest,
+  WorkshopPage,
+  WorkshopPrepareRequest,
+  WorkshopQuery
 } from './steam'
 import type {
   AppSettings,
@@ -78,6 +81,11 @@ export interface IpcContract {
   /** Works out a download (its manifests fetched, an existing folder checked): startDownload
    * takes the plan's id. */
   steamPrepare: { args: [request: SteamPrepareRequest]; result: SteamPlan }
+  /** A page of the Workshop of a game the account owns. */
+  steamWorkshop: { args: [query: WorkshopQuery]; result: WorkshopPage }
+  /** Works out a Workshop item's download into a folder, as steamPrepare does a game's:
+   * startDownload takes the plan's id. */
+  steamPrepareWorkshop: { args: [request: WorkshopPrepareRequest]; result: SteamPlan }
   /** The Steam client's libraries on this computer, with whether `installDir` is in each. Reads
    * local files only. */
   steamLibraryFolders: { args: [installDir?: string]; result: SteamLibraryFolder[] }

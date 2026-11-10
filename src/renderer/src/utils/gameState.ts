@@ -14,7 +14,7 @@ export type GameState =
     }
 
 /** A game's newest download that isn't over decides; then a finished one still where it was put;
- * then whether the Steam client has it. */
+ * then whether the Steam client has it. A download of one of its Workshop items isn't the game's. */
 export function gameState(
   appId: number,
   downloads: Record<string, DownloadState>,
@@ -23,7 +23,9 @@ export function gameState(
 ): GameState {
   let latest: DownloadState | undefined
   for (const download of Object.values(downloads)) {
-    if (download.app.appId !== appId || download.status === 'cancelled') continue
+    if (download.app.appId !== appId || download.workshop || download.status === 'cancelled') {
+      continue
+    }
     if (!latest || download.startedAt > latest.startedAt) latest = download
   }
   if (latest && latest.status !== 'completed' && latest.status !== 'cancelled') {
@@ -35,7 +37,9 @@ export function gameState(
   }
   if (latest) return { kind: 'installed', downloadId: latest.id }
   // History is newest first.
-  const finished = history.find((entry) => entry.app.appId === appId && !entry.missing)
+  const finished = history.find(
+    (entry) => entry.app.appId === appId && !entry.workshop && !entry.missing
+  )
   if (finished) return { kind: 'installed', downloadId: finished.id }
   return clientApps.includes(appId) ? { kind: 'in-steam' } : { kind: 'none' }
 }

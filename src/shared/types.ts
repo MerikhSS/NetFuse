@@ -169,6 +169,9 @@ export interface SteamDownloadState extends DownloadStateBase {
   chunksDone: number
   app: { appId: number; name: string; branch: string; buildId?: string }
   depots: { depotId: number; manifestId: string; name: string }[]
+  /** A Workshop item of `app`, rather than the app itself: its one depot is the app's Workshop
+   * depot, and it installs into a folder named after the item. */
+  workshop?: { publishedFileId: string; title: string }
   fileCount: number
   installBytes: number
   /** Installed into a folder that already existed: removing it never trashes the folder, and
@@ -320,6 +323,8 @@ export interface SteamRequestPayload {
   destinationDir: string
   interfaceIds: string[]
   streamsPerNetwork?: number
+  /** A Workshop item's download (see SteamDownloadState.workshop). */
+  workshop?: { publishedFileId: string }
 }
 
 export type StartDownloadRequest = StartSteamDownloadRequest

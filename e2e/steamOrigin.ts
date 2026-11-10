@@ -80,6 +80,29 @@ export interface SteamAppFixture {
   name: string
   installDir: string
   depots: SteamDepotFixture[]
+  /** Its Steam Workshop, when it has one. */
+  workshop?: WorkshopFixture
+}
+
+/** A game's Workshop: the depot its items' files are in, that depot's key, and the items. */
+export interface WorkshopFixture {
+  depotId: number
+  key: Buffer
+  items: WorkshopItemFixture[]
+}
+
+export interface WorkshopItemFixture {
+  publishedFileId: string
+  title: string
+  description: string
+  /** Its files' manifest in the Workshop depot; absent for an item in Steam's old storage. */
+  manifestId?: string
+  files: FixtureFile[]
+  subscriptions: number
+  /** Seconds since the epoch. */
+  createdAt: number
+  updatedAt: number
+  tags: string[]
 }
 
 const CHUNK = 64 * 1024
@@ -149,7 +172,51 @@ export function syntheticApp(seed = 1, scale = 1): SteamAppFixture {
         dlcAppId: 4100,
         files: [{ name: 'dlc/pack.bin', data: seeded(90_000, seed + 10) }]
       }
-    ]
+    ],
+    // In a depot of its own number, as appinfo can name one.
+    workshop: {
+      depotId: 4090,
+      key: keyFor(seed, 90),
+      items: [
+        {
+          publishedFileId: '3000000001',
+          title: 'Bigger Ships',
+          description: 'Doubles the size of every [b]ship[/b] in the game.',
+          manifestId: '7100000000000000001',
+          files: [
+            { name: 'descriptor.mod', data: seeded(400, seed + 20, true) },
+            { name: 'common', flags: 64 },
+            { name: 'common/ships.txt', data: seeded(150_000, seed + 21, true) },
+            { name: 'gfx/ships.bin', data: seeded(200_000 * scale, seed + 22) }
+          ],
+          subscriptions: 9_000,
+          createdAt: 1_700_000_100,
+          updatedAt: 1_790_000_000,
+          tags: ['Gameplay', 'Ships']
+        },
+        {
+          publishedFileId: '3000000002',
+          title: 'Faster Lanes',
+          description: 'Hyperlanes, but quicker.',
+          manifestId: '7100000000000000002',
+          files: [{ name: 'lanes/speed.txt', data: seeded(60_000, seed + 23, true) }],
+          subscriptions: 120_000,
+          createdAt: 1_700_000_200,
+          updatedAt: 1_780_000_000,
+          tags: ['Balance']
+        },
+        {
+          publishedFileId: '3000000003',
+          title: 'Old Map Pack',
+          description: 'From before the Workshop moved to Steam’s content servers.',
+          files: [],
+          subscriptions: 50,
+          createdAt: 1_600_000_000,
+          updatedAt: 1_600_000_000,
+          tags: ['Maps']
+        }
+      ]
+    }
   }
 }
 
@@ -259,6 +326,12 @@ export class SteamOrigin {
   /** Every manifest request code and CDN token handed out, which must not either. */
   readonly grants: string[] = []
   readonly manifests = new Map<number, FixtureManifest>()
+  /** Workshop items' manifests, by depot/manifest: a Workshop depot has one per item. */
+  private readonly workshopManifests = new Map<string, FixtureManifest>()
+  /** Every Workshop picture asked for, by item id. */
+  readonly workshopArtRequests: string[] = []
+  /** Every Workshop query, as the app sent it. */
+  readonly workshopQueries: Record<string, unknown>[] = []
   private readonly chunks = new Map<string, FixtureChunk>()
   private readonly attempts = new Map<string, Attempt>()
   private readonly sessions = new Set<string>()
@@ -297,6 +370,21 @@ export class SteamOrigin {
       })
       this.manifests.set(depot.depotId, manifest)
       for (const [sha, chunk] of manifest.chunks) this.chunks.set(`${depot.depotId}/${sha}`, chunk)
+    }
+    const workshop = app.workshop
+    for (const item of workshop?.items ?? []) {
+      if (!workshop || !item.manifestId) continue
+      const manifest = buildManifest({
+        depotId: workshop.depotId,
+        manifestId: item.manifestId,
+        key: workshop.key,
+        files: item.files,
+        chunkSize: CHUNK
+      })
+      this.workshopManifests.set(`${workshop.depotId}/${item.manifestId}`, manifest)
+      for (const [sha, chunk] of manifest.chunks) {
+        this.chunks.set(`${workshop.depotId}/${sha}`, chunk)
+      }
     }
     this.content = [0, 1].map((index) =>
       createServer((req, res) => void this.serve(index, req, res))
@@ -339,6 +427,17 @@ export class SteamOrigin {
   expectedSha(depots: number[] = OWNED_DEPOTS): string {
     const lines = installedTree(this.app, depots)
       .map((file) => `${file.path}\0${sha256(file.data)}\n`)
+      .sort()
+      .join('')
+    return sha256(Buffer.from(lines))
+  }
+
+  /** The treeSha a Workshop item's folder must have. */
+  expectedWorkshopSha(publishedFileId: string): string {
+    const item = this.app.workshop?.items.find((entry) => entry.publishedFileId === publishedFileId)
+    const lines = (item?.files ?? [])
+      .filter((file) => !((file.flags ?? 0) & (64 | 512)))
+      .map((file) => `${file.name}\0${sha256(file.data ?? Buffer.alloc(0))}\n`)
       .sort()
       .join('')
     return sha256(Buffer.from(lines))
@@ -416,11 +515,37 @@ export class SteamOrigin {
       public: { buildid: '1000', timeupdated: '1700000000' },
       beta: { buildid: '1001', pwdrequired: '1', description: 'Testers only' }
     }
+    if (this.app.workshop) depots.workshopdepot = String(this.app.workshop.depotId)
     return {
       appid: String(this.app.appId),
-      common: { name: this.app.name, type: 'Game', oslist: 'windows,macos,linux' },
+      common: {
+        name: this.app.name,
+        type: 'Game',
+        oslist: 'windows,macos,linux',
+        ...(this.app.workshop ? { workshop_visible: '1' } : {})
+      },
       config: { installdir: this.app.installDir },
       depots
+    }
+  }
+
+  /** A Workshop item's details, as PublishedFile.GetDetails and QueryFiles send them. */
+  private workshopDetails(item: WorkshopItemFixture): Record<string, unknown> {
+    const size = item.files.reduce((sum, file) => sum + (file.data?.length ?? 0), 0)
+    return {
+      result: 1,
+      publishedfileid: item.publishedFileId,
+      consumer_appid: this.app.appId,
+      title: item.title,
+      short_description: item.description,
+      file_size: String(size),
+      hcontent_file: item.manifestId ?? '0',
+      ...(item.manifestId ? {} : { file_url: 'https://cloud-3.steamusercontent.com/ugc/old/' }),
+      preview_url: `${this.url}/ugc/${item.publishedFileId}.png`,
+      time_created: item.createdAt,
+      time_updated: item.updatedAt,
+      subscriptions: item.subscriptions,
+      tags: item.tags.map((tag) => ({ tag, display_name: tag }))
     }
   }
 
@@ -448,6 +573,15 @@ export class SteamOrigin {
     const body = (req.method === 'POST' ? await readBody(req) : {}) as Record<string, unknown>
     const path = url.pathname
     const param = (name: string): string => url.searchParams.get(name) ?? ''
+
+    // Steam's Workshop image server: a picture for every item.
+    const ugc = /^\/ugc\/(\d+)\.png$/.exec(path)
+    if (ugc) {
+      this.workshopArtRequests.push(ugc[1])
+      const shade = Number(ugc[1]) % 7
+      const image = gradientPng(64, 64, [60 + shade * 20, 120, 200 - shade * 20], [20, 20, 30])
+      return void res.writeHead(200, { 'content-type': 'image/png' }).end(image)
+    }
 
     // Steam's store CDN, which needs no login.
     if (path.startsWith('/art/')) {
@@ -578,7 +712,46 @@ export class SteamOrigin {
         )
       })
     }
+    if (path === '/cm/workshop/query') {
+      this.workshopQueries.push(body)
+      const items = [...(this.app.workshop?.items ?? [])]
+      if (Number(body.appId) !== this.app.appId) return send({ total: 0, items: [] })
+      const search = String(body.searchText ?? '').toLowerCase()
+      const matching =
+        Number(body.queryType) === 12
+          ? items.filter((item) => item.title.toLowerCase().includes(search))
+          : items
+      const order: Record<number, (item: WorkshopItemFixture) => number> = {
+        3: (item) => item.subscriptions,
+        9: (item) => item.subscriptions,
+        1: (item) => item.createdAt,
+        21: (item) => item.updatedAt
+      }
+      const by = order[Number(body.queryType)]
+      if (by) matching.sort((a, b) => by(b) - by(a))
+      const start = body.cursor === '*' ? 0 : Number(body.cursor) || 0
+      const perPage = Number(body.perPage) || 30
+      return send({
+        total: matching.length,
+        items: matching.slice(start, start + perPage).map((item) => this.workshopDetails(item)),
+        nextCursor: start + perPage < matching.length ? String(start + perPage) : undefined
+      })
+    }
+    if (path === '/cm/workshop/details') {
+      const ids = Array.isArray(body.ids) ? body.ids.map(String) : []
+      return send(
+        ids.map((id) => {
+          const item = this.app.workshop?.items.find((entry) => entry.publishedFileId === id)
+          return item ? this.workshopDetails(item) : { publishedfileid: id, result: 9 }
+        })
+      )
+    }
     if (path === '/cm/depotkey') {
+      const workshop = this.app.workshop
+      // A Workshop's depot is for the game's owners, as the test account is.
+      if (workshop && Number(param('depot')) === workshop.depotId) {
+        return send({ key: workshop.key.toString('hex') })
+      }
       const depot = this.app.depots.find((entry) => entry.depotId === Number(param('depot')))
       if (!depot?.owned) return refuse('Access denied', 15)
       return send({ key: depot.key.toString('hex') })
@@ -641,6 +814,7 @@ export class SteamOrigin {
       const fixture = this.manifests.get(Number(depot))
       if (!this.requestCodes.has(`${depot}/${manifest}/${code}`)) return end(401)
       if (fixture?.manifestId === manifest) body = fixture.zipped
+      else body = this.workshopManifests.get(`${depot}/${manifest}`)?.zipped
     }
     if (!body) return end(404)
 

@@ -5,7 +5,9 @@ import type {
   SteamLoginRequest,
   SteamLoginState,
   SteamPrepareProgress,
-  SteamPrepareRequest
+  SteamPrepareRequest,
+  WorkshopPrepareRequest,
+  WorkshopQuery
 } from '../shared/steam'
 import type {
   AppSettings,
@@ -65,6 +67,9 @@ const netfuseApi = {
   steamOwnedApps: (refresh?: boolean) => invoke('steamOwnedApps', refresh),
   steamAppDetails: (appId: number) => invoke('steamAppDetails', appId),
   steamPrepare: (request: SteamPrepareRequest) => invoke('steamPrepare', request),
+  steamWorkshop: (query: WorkshopQuery) => invoke('steamWorkshop', query),
+  steamPrepareWorkshop: (request: WorkshopPrepareRequest) =>
+    invoke('steamPrepareWorkshop', request),
   steamLibraryFolders: (installDir?: string) => invoke('steamLibraryFolders', installDir),
   steamClientApps: () => invoke('steamClientApps'),
 

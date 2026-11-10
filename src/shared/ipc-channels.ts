@@ -36,6 +36,8 @@ export const IpcChannels = {
   steamOwnedApps: 'steam:owned-apps',
   steamAppDetails: 'steam:app-details',
   steamPrepare: 'steam:prepare',
+  steamWorkshop: 'steam:workshop',
+  steamPrepareWorkshop: 'steam:prepare-workshop',
   steamLibraryFolders: 'steam:library-folders',
   steamClientApps: 'steam:client-apps',
   steamLoginStateChanged: 'steam:login-state-changed',

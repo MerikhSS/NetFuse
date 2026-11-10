@@ -282,6 +282,37 @@ export class NetFuseApp {
     return id
   }
 
+  /** Plans and starts the download of one of `steam`'s Workshop items into the test's folder,
+   * the way the Workshop tab does, logging in first if need be. */
+  async startWorkshop(
+    steam: SteamOrigin,
+    publishedFileId: string,
+    options: { destinationDir?: string; adopt?: boolean; networks?: string[] } = {}
+  ): Promise<string> {
+    await this.pinStreams(2)
+    if ((await this.api.steamLoginState()).status !== 'logged-in') await this.loginSteam()
+    await this.api.listInterfaces()
+    const destinationDir = options.destinationDir ?? this.dirs.dest
+    const destBefore = existsSync(destinationDir) ? await readdir(destinationDir) : []
+    const plan = await this.api.steamPrepareWorkshop({
+      appId: steam.app.appId,
+      publishedFileId,
+      destinationDir,
+      adopt: options.adopt ?? false
+    })
+    const id = await this.api.startDownload({
+      kind: 'steam',
+      planId: plan.planId,
+      interfaceIds: options.networks ?? ['a']
+    })
+    this.tracked.set(id, {
+      expectedSha: steam.expectedWorkshopSha(publishedFileId),
+      destBefore,
+      destinationDir
+    })
+    return id
+  }
+
   async waitForSteamStatus(
     status: DownloadStatus | DownloadStatus[],
     timeout = 20_000

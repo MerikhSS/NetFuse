@@ -59,11 +59,14 @@ export function LibraryScreen(): React.JSX.Element {
     void loadClientApps()
   }, [loadLibrary, loadClientApps])
 
-  // Installed by either: this app's finished downloads still where they were put, or Steam.
+  // Installed by either: this app's finished downloads of games (not of their Workshop items)
+  // still where they were put, or Steam.
   const installed = useMemo(
     () =>
       new Set([
-        ...history.filter((entry) => !entry.missing).map((entry) => entry.app.appId),
+        ...history
+          .filter((entry) => !entry.missing && !entry.workshop)
+          .map((entry) => entry.app.appId),
         ...clientApps
       ]),
     [history, clientApps]

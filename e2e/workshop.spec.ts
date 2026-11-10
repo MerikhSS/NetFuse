@@ -8,6 +8,8 @@ import {
   workshopPreview,
   workshopQuery
 } from '../src/main/steam/workshop'
+import { gameState } from '../src/renderer/src/utils/gameState'
+import type { DownloadState, FinishedDownload } from '../src/shared/types'
 
 // What NetFuse makes of a game's Steam Workshop: the queries it sends, and the items it lists,
 // checked, from details that come off the network. The tab and downloads are in
@@ -148,4 +150,33 @@ test('a game’s Workshop and the depot its items are in come from its appinfo',
     readAppInfo(281990, { common: { name: 'Stellaris' }, depots: { workshopdepot: 'x' } })
       .workshopDepot
   ).toBe(281990)
+})
+
+test('a download of a game’s Workshop item is never taken for the game’s own', () => {
+  const base = {
+    kind: 'steam',
+    app: { appId: 281990, name: 'Stellaris', branch: 'public' },
+    totalBytes: 100,
+    bytesDownloaded: 40,
+    startedAt: 1
+  }
+  const mod = {
+    ...base,
+    id: 'mod',
+    status: 'downloading',
+    workshop: { publishedFileId: '2863190123456789', title: 'Gigastructures' }
+  } as unknown as DownloadState
+  const finishedMod = {
+    ...mod,
+    status: 'completed',
+    unitsWritten: 1
+  } as unknown as FinishedDownload
+  expect(gameState(281990, { mod }, [], [])).toEqual({ kind: 'none' })
+  expect(gameState(281990, {}, [finishedMod], [])).toEqual({ kind: 'none' })
+  // The game's own download still counts.
+  const game = { ...base, id: 'game', status: 'downloading' } as unknown as DownloadState
+  expect(gameState(281990, { mod, game }, [finishedMod], [])).toMatchObject({
+    kind: 'downloading',
+    downloadId: 'game'
+  })
 })

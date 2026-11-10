@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { lstat, open, statfs } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
-import type { SteamPlan, SteamPrepareProgress, SteamPrepareRequest } from '../../shared/steam'
+import type {
+  SteamPlan,
+  SteamPrepareProgress,
+  SteamPrepareRequest,
+  WorkshopPrepareRequest
+} from '../../shared/steam'
 import { HttpStatusError } from '../download/httpStatus'
 import { sanitizeFileName } from '../download/paths'
 import type { NetworkMonitor } from '../network/interfaces'
@@ -17,12 +22,17 @@ import type { SteamLibrary } from './library'
 import { decryptManifestNames, readManifest, type Manifest } from './manifest'
 import { redactedMessage } from './redact'
 import { manifestUrl, rankServers, ServerPool, TokenCache } from './servers'
+import type { SteamSession } from './backend'
+import { isPublishedFileId, readWorkshopItem, workshopManifest } from './workshop'
 
 // From what the user picked (an app, a branch, depots, a folder) to a download ready to start:
 // every depot's manifest fetched over one of the user's networks (pinned and counted through
 // Limits like every other byte NetFuse receives), decrypted, and turned into the install's layout,
 // every path checked before anything is written. Installing over an existing folder also checks
 // what is already there, chunk by chunk, so only what is missing or different is fetched.
+//
+// A Workshop item is planned the same way: its files are one manifest in its game's Workshop
+// depot (see workshop.ts), downloaded as a game's depot is, into a folder named after the item.
 //
 // A plan waits here, in memory, for startDownload to take it; nothing secret is in it (depot keys
 // are asked for again when the download runs).
@@ -45,7 +55,8 @@ export interface PreparedDepot {
 /** A download ready to start, as startDownload takes it. */
 export interface PreparedDownload {
   plan: SteamPlan
-  request: SteamPrepareRequest
+  /** Into a folder that already exists (see SteamPrepareRequest.adopt). */
+  adopt: boolean
   branch: string
   buildId?: string
   depots: PreparedDepot[]
@@ -58,7 +69,24 @@ export interface PreparedDownload {
   folderName: string
   /** The files checked, as they were: start refuses a plan whose files changed since. */
   checked: { path: string; size: number; mtimeMs: number }[]
+  /** A Workshop item of the app, rather than the app itself. */
+  workshop?: { publishedFileId: string; title: string }
   createdAt: number
+}
+
+/** What both kinds of plan are made from, once their manifests are in. */
+interface PlanParts {
+  appId: number
+  appName: string
+  /** The item's name, for a Workshop item: what the plan's folder is for. */
+  workshop?: { publishedFileId: string; title: string }
+  folderName: string
+  destinationDir: string
+  adopt: boolean
+  branch: string
+  buildId?: string
+  depots: PreparedDepot[]
+  manifests: Manifest[]
 }
 
 export interface PlannerServices {
@@ -67,6 +95,19 @@ export interface PlannerServices {
   networks: NetworkMonitor
   limits: Limits
   progress: (progress: SteamPrepareProgress) => void
+}
+
+function checkWorkshopRequest(request: WorkshopPrepareRequest): void {
+  if (
+    !Number.isSafeInteger(request.appId) ||
+    request.appId <= 0 ||
+    !isPublishedFileId(request.publishedFileId) ||
+    typeof request.destinationDir !== 'string' ||
+    !isAbsolute(request.destinationDir) ||
+    typeof request.adopt !== 'boolean'
+  ) {
+    throw new Error('Choose what to download again.')
+  }
 }
 
 function checkRequest(request: SteamPrepareRequest): void {
@@ -137,111 +178,172 @@ export class SteamPlanner {
         if (reason) throw new Error(`${depot.name}: ${reason}`)
       }
 
-      const folderName = sanitizeFileName(details.installDir || details.name)
-
-      const servers = new ServerPool(
-        rankServers(await session.contentServers(request.appId), request.appId)
-      )
-      const tokens = new TokenCache((depotId, host) =>
-        session.cdnAuthToken(request.appId, depotId, host)
-      )
-      const manifests: Manifest[] = []
-      for (const [index, depot] of chosen.entries()) {
-        this.services.progress({
-          appId: request.appId,
-          step: 'manifests',
-          done: index,
-          total: chosen.length
-        })
-        const manifestId = manifestFor(depot, request.branch)!.gid
-        const key = await session.depotKey(request.appId, depot.depotId)
-        const code = await session.manifestRequestCode(
-          request.appId,
-          depot.depotId,
-          manifestId,
-          request.branch
-        )
-        const zipped = await this.fetchManifest(servers, tokens, depot.depotId, manifestId, code)
-        const manifest = readManifest(zipped)
-        if (manifest.depotId !== depot.depotId || manifest.manifestId !== manifestId) {
-          throw new Error(`Steam sent the wrong manifest for ${depot.name}.`)
-        }
-        decryptManifestNames(manifest, key)
-        manifests.push(manifest)
-      }
-      const layout = buildLayout(manifests)
-
-      const folder = join(request.destinationDir, folderName)
-      let present: Uint8Array | null = null
-      let checked: PreparedDownload['checked'] = []
-      let presentBytes = 0
-      if (request.adopt) {
-        const existing = await lstat(folder).catch(() => null)
-        if (!existing?.isDirectory())
-          throw new Error(`There is no folder named ${folderName} to install into.`)
-        const found = await this.checkExisting(request.appId, layout, folder)
-        present = found.present
-        checked = found.checked
-        presentBytes = found.presentBytes
-        if (present.every((value) => value === 1)) {
-          throw new Error('Everything in this folder is already up to date.')
-        }
-      }
-
-      const warnings: string[] = []
-      if (process.platform === 'win32') {
-        const longest = Math.max(...layout.files.map((file) => join(folder, file.path).length))
-        if (longest > WINDOWS_PATH_LIMIT) {
-          warnings.push('Some paths in this game are longer than some Windows programs can open.')
-        }
-        if (layout.files.some((file) => file.kind === 'symlink')) {
-          warnings.push(
-            'This game has symbolic links, which Windows lets NetFuse create only with Developer Mode on.'
-          )
-        }
-      }
-      const downloadBytes = layout.units.reduce(
-        (sum, unit, index) => (present?.[index] ? sum : sum + unit.compressedSize),
-        0
-      )
-      const plan: SteamPlan = {
-        planId: randomUUID(),
+      const depots = chosen.map((depot) => ({
+        depotId: depot.depotId,
+        manifestId: manifestFor(depot, request.branch)!.gid,
+        name: depot.name
+      }))
+      return await this.plan({
         appId: request.appId,
         appName: details.name,
-        folderName,
+        folderName: sanitizeFileName(details.installDir || details.name),
         destinationDir: request.destinationDir,
-        fileCount: layout.files.filter((file) => file.kind !== 'directory').length,
-        downloadBytes,
-        installBytes: layout.installBytes,
-        freeBytes: await freeSpace(request.destinationDir),
-        presentBytes,
-        warnings
-      }
-      const now = Date.now()
-      this.plans.set(plan.planId, {
-        plan,
-        request,
+        adopt: request.adopt,
         branch: request.branch,
         buildId: branch?.buildId,
-        depots: chosen.map((depot) => ({
-          depotId: depot.depotId,
-          manifestId: manifestFor(depot, request.branch)!.gid,
-          name: depot.name
-        })),
-        manifests,
-        layout,
-        units: Uint32Array.from([...layout.units.keys()].filter((index) => !present?.[index])),
-        folderName,
-        checked,
-        createdAt: now
+        depots,
+        manifests: await this.fetchManifests(session, request.appId, depots, request.branch)
       })
-      this.expire(now)
-      return plan
     } catch (error) {
       // Messages from the network and the libraries may carry tokens or request codes.
       if (error instanceof UnsafeLayoutError) throw error
       throw new Error(redactedMessage(error))
     }
+  }
+
+  /** A Workshop item of a game the account owns, into a folder of the user's choosing. What it
+   * is, and where its files are, is asked of Steam: never taken from the window. */
+  async prepareWorkshop(request: WorkshopPrepareRequest): Promise<SteamPlan> {
+    checkWorkshopRequest(request)
+    const { account, library } = this.services
+    try {
+      const session = await account.current()
+      // Refused unless the account owns the game: Steam gives a Workshop depot's key to its
+      // owners only, and NetFuse doesn't ask otherwise.
+      const details = await library.appDetails(request.appId)
+      const raw = (await session.workshopDetails([request.publishedFileId])).find(
+        (entry) =>
+          String((entry as { publishedfileid?: unknown } | null)?.publishedfileid) ===
+          request.publishedFileId
+      )
+      const item = readWorkshopItem(raw, request.appId)
+      if (!item) throw new Error('This isn’t an item of this game’s Workshop.')
+      const manifestId = workshopManifest(raw)
+      if (!manifestId) {
+        throw new Error(
+          'This item is kept in Steam’s old Workshop storage, which NetFuse can’t download.'
+        )
+      }
+      const depots = [{ depotId: details.workshopDepot, manifestId, name: item.title }]
+      const workshop = { publishedFileId: item.publishedFileId, title: item.title }
+      return await this.plan({
+        appId: request.appId,
+        appName: details.name,
+        workshop,
+        folderName: sanitizeFileName(item.title) || item.publishedFileId,
+        destinationDir: request.destinationDir,
+        adopt: request.adopt,
+        branch: 'public',
+        depots,
+        manifests: await this.fetchManifests(session, request.appId, depots, 'public')
+      })
+    } catch (error) {
+      if (error instanceof UnsafeLayoutError) throw error
+      throw new Error(redactedMessage(error))
+    }
+  }
+
+  /** Each depot's manifest, fetched over the user's networks, checked and decrypted. */
+  private async fetchManifests(
+    session: SteamSession,
+    appId: number,
+    depots: PreparedDepot[],
+    branch: string
+  ): Promise<Manifest[]> {
+    const servers = new ServerPool(rankServers(await session.contentServers(appId), appId))
+    const tokens = new TokenCache((depotId, host) => session.cdnAuthToken(appId, depotId, host))
+    const manifests: Manifest[] = []
+    for (const [index, depot] of depots.entries()) {
+      this.services.progress({ appId, step: 'manifests', done: index, total: depots.length })
+      const key = await session.depotKey(appId, depot.depotId)
+      const code = await session.manifestRequestCode(appId, depot.depotId, depot.manifestId, branch)
+      const zipped = await this.fetchManifest(
+        servers,
+        tokens,
+        depot.depotId,
+        depot.manifestId,
+        code
+      )
+      const manifest = readManifest(zipped)
+      if (manifest.depotId !== depot.depotId || manifest.manifestId !== depot.manifestId) {
+        throw new Error(`Steam sent the wrong manifest for ${depot.name}.`)
+      }
+      decryptManifestNames(manifest, key)
+      manifests.push(manifest)
+    }
+    return manifests
+  }
+
+  /** The layout the manifests make, checked against an existing folder when installing over
+   * one, and kept as a plan for startDownload to take. */
+  private async plan(parts: PlanParts): Promise<SteamPlan> {
+    const { appId, folderName, destinationDir, adopt, manifests } = parts
+    const layout = buildLayout(manifests)
+    const what = parts.workshop ? 'item' : 'game'
+
+    const folder = join(destinationDir, folderName)
+    let present: Uint8Array | null = null
+    let checked: PreparedDownload['checked'] = []
+    let presentBytes = 0
+    if (adopt) {
+      const existing = await lstat(folder).catch(() => null)
+      if (!existing?.isDirectory())
+        throw new Error(`There is no folder named ${folderName} to install into.`)
+      const found = await this.checkExisting(appId, layout, folder)
+      present = found.present
+      checked = found.checked
+      presentBytes = found.presentBytes
+      if (present.every((value) => value === 1)) {
+        throw new Error('Everything in this folder is already up to date.')
+      }
+    }
+
+    const warnings: string[] = []
+    if (process.platform === 'win32') {
+      const longest = Math.max(...layout.files.map((file) => join(folder, file.path).length))
+      if (longest > WINDOWS_PATH_LIMIT) {
+        warnings.push(`Some paths in this ${what} are longer than some Windows programs can open.`)
+      }
+      if (layout.files.some((file) => file.kind === 'symlink')) {
+        warnings.push(
+          `This ${what} has symbolic links, which Windows lets NetFuse create only with Developer Mode on.`
+        )
+      }
+    }
+    const downloadBytes = layout.units.reduce(
+      (sum, unit, index) => (present?.[index] ? sum : sum + unit.compressedSize),
+      0
+    )
+    const plan: SteamPlan = {
+      planId: randomUUID(),
+      appId,
+      appName: parts.appName,
+      folderName,
+      destinationDir,
+      fileCount: layout.files.filter((file) => file.kind !== 'directory').length,
+      downloadBytes,
+      installBytes: layout.installBytes,
+      freeBytes: await freeSpace(destinationDir),
+      presentBytes,
+      warnings
+    }
+    const now = Date.now()
+    this.plans.set(plan.planId, {
+      plan,
+      adopt,
+      branch: parts.branch,
+      buildId: parts.buildId,
+      depots: parts.depots,
+      manifests,
+      layout,
+      units: Uint32Array.from([...layout.units.keys()].filter((index) => !present?.[index])),
+      folderName,
+      checked,
+      workshop: parts.workshop,
+      createdAt: now
+    })
+    this.expire(now)
+    return plan
   }
 
   /** A depot's manifest from the first server, on the first network, that sends it. */

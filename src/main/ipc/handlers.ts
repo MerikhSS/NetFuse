@@ -16,7 +16,13 @@ import {
   type InitialState,
   type ThemeSource
 } from '../../shared/types'
-import type { SteamLoginRequest, SteamPrepareRequest } from '../../shared/steam'
+import type {
+  SteamLoginRequest,
+  SteamPrepareRequest,
+  WorkshopPrepareRequest,
+  WorkshopQuery,
+  WorkshopSort
+} from '../../shared/steam'
 import type { StartSteamDownloadRequest } from '../../shared/types'
 import { DownloadManager } from '../download/downloadManager'
 import { MAX_STREAMS_PER_NETWORK } from '../download/plan'
@@ -122,6 +128,45 @@ function checkPrepareRequest(value: unknown): SteamPrepareRequest {
       appId: request.appId,
       branch: request.branch,
       depotIds: request.depotIds,
+      destinationDir: request.destinationDir,
+      adopt: request.adopt
+    }
+  }
+  throw new Error('Choose what to download again.')
+}
+
+const WORKSHOP_SORTS: WorkshopSort[] = ['popular', 'subscribed', 'recent', 'updated']
+
+function checkWorkshopQuery(value: unknown): WorkshopQuery {
+  const query = value as Partial<Record<keyof WorkshopQuery, unknown>> | null
+  if (
+    isId(query?.appId) &&
+    WORKSHOP_SORTS.includes(query.sort as WorkshopSort) &&
+    (query.search === undefined ||
+      (typeof query.search === 'string' && query.search.length <= 200)) &&
+    (query.cursor === undefined || isText(query.cursor, 256))
+  ) {
+    return {
+      appId: query.appId,
+      sort: query.sort as WorkshopSort,
+      search: query.search as string | undefined,
+      cursor: query.cursor as string | undefined
+    }
+  }
+  throw new Error('Choose what to list again.')
+}
+
+function checkWorkshopPrepare(value: unknown): WorkshopPrepareRequest {
+  const request = value as Partial<Record<keyof WorkshopPrepareRequest, unknown>> | null
+  if (
+    isId(request?.appId) &&
+    isText(request.publishedFileId, 20) &&
+    isText(request.destinationDir, 4096) &&
+    typeof request.adopt === 'boolean'
+  ) {
+    return {
+      appId: request.appId,
+      publishedFileId: request.publishedFileId,
       destinationDir: request.destinationDir,
       adopt: request.adopt
     }
@@ -350,6 +395,12 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Down
   })
   handle('steamPrepare', async (_event, request) =>
     redacting(() => planner.prepare(checkPrepareRequest(request)))
+  )
+  handle('steamWorkshop', async (_event, query) =>
+    redacting(() => library.workshop(checkWorkshopQuery(query)))
+  )
+  handle('steamPrepareWorkshop', async (_event, request) =>
+    redacting(() => planner.prepareWorkshop(checkWorkshopPrepare(request)))
   )
   handle('steamLibraryFolders', async (_event, installDir) => {
     if (installDir !== undefined && !isText(installDir, 255)) {

@@ -1,4 +1,9 @@
-import type { SteamAppDetails, SteamOwnedApp } from '../../shared/steam'
+import type {
+  SteamAppDetails,
+  SteamOwnedApp,
+  WorkshopPage,
+  WorkshopQuery
+} from '../../shared/steam'
 import type { SteamAccount } from './account'
 import {
   depotNameSources,
@@ -9,6 +14,7 @@ import {
   type SteamArtPaths
 } from './appInfo'
 import type { SteamSession } from './backend'
+import { readWorkshopItem, workshopQuery } from './workshop'
 
 // What the logged-in account owns, and what an app is made of. Ownership comes from the account's
 // own licenses: each license is a package, and a package lists the apps and depots it grants
@@ -19,6 +25,9 @@ import type { SteamSession } from './backend'
 /** Appinfo requests are batched: a big library is thousands of apps. */
 const PACKAGES_PER_REQUEST = 500
 const APPS_PER_REQUEST = 200
+/** Workshop pictures' addresses kept: a few hundred pages of a Workshop. */
+const PREVIEWS_KEPT = 5000
+
 /** App types listed in the library. DLC installs with its game; the rest isn't installable. */
 const LISTED_TYPES = new Set(['game', 'application', 'tool', 'demo', 'beta'])
 
@@ -52,6 +61,9 @@ export class SteamLibrary {
   private apps: Promise<SteamOwnedApp[]> | null = null
   /** Where each listed app's pictures are, from the appinfo the listing fetched. */
   private readonly art = new Map<number, SteamArtPaths>()
+  /** Where Workshop items' pictures are, as Steam gave them, by item: art.ts checks and fetches
+   * them. */
+  private readonly previews = new Map<string, string>()
 
   constructor(private readonly account: SteamAccount) {
     // A different login owns different things.
@@ -167,6 +179,46 @@ export class SteamLibrary {
       // Only names: without them, those depots go by their numbers.
     }
     return details
+  }
+
+  /** A page of the Workshop of a game the account owns. */
+  async workshop(query: WorkshopQuery): Promise<WorkshopPage> {
+    const request = workshopQuery(query)
+    const { session, apps } = await this.owned()
+    if (!apps.has(request.appId)) {
+      throw new Error(
+        'This Steam account doesn’t own this game, so NetFuse won’t list its Workshop.'
+      )
+    }
+    const page = await session.queryWorkshop(request)
+    const items: WorkshopPage['items'] = []
+    for (const raw of page.items) {
+      const item = readWorkshopItem(raw, request.appId)
+      if (!item) continue
+      items.push(item)
+      this.rememberPreview(item.publishedFileId, raw)
+    }
+    return { items, total: Math.max(page.total, items.length), nextCursor: page.nextCursor }
+  }
+
+  /** Where a Workshop item's picture is, as Steam gave it: the listing's, or asked for. */
+  async workshopPreview(publishedFileId: string): Promise<string | undefined> {
+    if (!this.previews.has(publishedFileId)) {
+      const { session } = await this.owned()
+      const [raw] = await session.workshopDetails([publishedFileId])
+      this.rememberPreview(publishedFileId, raw)
+    }
+    return this.previews.get(publishedFileId) || undefined
+  }
+
+  /** An empty address is kept too: the item has no picture, and isn't asked about again. */
+  private rememberPreview(publishedFileId: string, raw: unknown): void {
+    const url = (raw as { preview_url?: unknown } | null)?.preview_url
+    this.previews.delete(publishedFileId)
+    this.previews.set(publishedFileId, typeof url === 'string' && url.length <= 2048 ? url : '')
+    if (this.previews.size > PREVIEWS_KEPT) {
+      this.previews.delete(this.previews.keys().next().value!)
+    }
   }
 
   /** Whether the account is licensed for `depotId`, and how. */
