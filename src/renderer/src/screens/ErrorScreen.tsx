@@ -109,7 +109,13 @@ export function ErrorScreen({ download }: { download: DownloadState }): React.JS
 
           <div className="flex w-full min-w-0 items-center gap-2 border-t-[0.5px] border-border pt-3">
             <div className="min-w-0 flex-1 text-left font-mono text-[11px] leading-none text-muted-foreground">
-              <TruncatedText text={`Steam app ${download.app.appId} · ${download.app.branch}`} />
+              <TruncatedText
+                text={
+                  download.workshop
+                    ? `Workshop item ${download.workshop.publishedFileId} · ${download.app.name}`
+                    : `Steam app ${download.app.appId} · ${download.app.branch}`
+                }
+              />
             </div>
           </div>
         </div>

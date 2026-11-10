@@ -21,11 +21,34 @@ export function gameState(
   history: FinishedDownload[],
   clientApps: number[]
 ): GameState {
+  const own = (download: DownloadState | FinishedDownload): boolean =>
+    download.app.appId === appId && !download.workshop
+  return (
+    latestState(own, downloads, history) ??
+    (clientApps.includes(appId) ? { kind: 'in-steam' } : { kind: 'none' })
+  )
+}
+
+/** Where one Workshop item stands on this computer, as for a game: its newest download that isn't
+ * over, then a finished one still where it was put. */
+export function workshopState(
+  publishedFileId: string,
+  downloads: Record<string, DownloadState>,
+  history: FinishedDownload[]
+): GameState {
+  const its = (download: DownloadState | FinishedDownload): boolean =>
+    download.workshop?.publishedFileId === publishedFileId
+  return latestState(its, downloads, history) ?? { kind: 'none' }
+}
+
+function latestState(
+  matches: (download: DownloadState | FinishedDownload) => boolean,
+  downloads: Record<string, DownloadState>,
+  history: FinishedDownload[]
+): GameState | null {
   let latest: DownloadState | undefined
   for (const download of Object.values(downloads)) {
-    if (download.app.appId !== appId || download.workshop || download.status === 'cancelled') {
-      continue
-    }
+    if (!matches(download) || download.status === 'cancelled') continue
     if (!latest || download.startedAt > latest.startedAt) latest = download
   }
   if (latest && latest.status !== 'completed' && latest.status !== 'cancelled') {
@@ -37,11 +60,8 @@ export function gameState(
   }
   if (latest) return { kind: 'installed', downloadId: latest.id }
   // History is newest first.
-  const finished = history.find(
-    (entry) => entry.app.appId === appId && !entry.workshop && !entry.missing
-  )
-  if (finished) return { kind: 'installed', downloadId: finished.id }
-  return clientApps.includes(appId) ? { kind: 'in-steam' } : { kind: 'none' }
+  const finished = history.find((entry) => matches(entry) && !entry.missing)
+  return finished ? { kind: 'installed', downloadId: finished.id } : null
 }
 
 /** How a game's state reads under its picture. */
@@ -62,4 +82,9 @@ export function describeGameState(state: GameState): string | null {
     case 'none':
       return null
   }
+}
+
+/** How a Workshop item's state reads: an item is downloaded rather than installed. */
+export function describeWorkshopState(state: GameState): string | null {
+  return state.kind === 'installed' ? 'Downloaded' : describeGameState(state)
 }

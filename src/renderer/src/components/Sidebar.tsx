@@ -1,5 +1,5 @@
 import { cn } from 'cn'
-import { ChevronsUpDown, Download, Gamepad2, LogOut, type LucideIcon } from 'lucide-react'
+import { ChevronsUpDown, Download, Gamepad2, LogOut, Puzzle, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { LimitsDialog } from './LimitsDialog'
@@ -12,9 +12,9 @@ import {
   DropdownMenuTrigger
 } from './ui/dropdown-menu'
 
-// The way around the window: each launcher's library, then the downloads; at the foot, the
-// networks every download shares and the account. Steam is the only launcher so far. Another
-// gets a row here and a library screen of its own, and nothing else has to move.
+// The way around the window: each launcher's library (and Steam's Workshop), then the downloads;
+// at the foot, the networks every download shares and the account. Steam is the only launcher so
+// far. Another gets a row here and a library screen of its own, and nothing else has to move.
 
 const sectionClass =
   'px-3 pt-4 pb-1.5 font-mono text-[10px] leading-none font-medium tracking-[0.16em] text-muted-foreground uppercase'
@@ -97,6 +97,7 @@ function AccountMenu(): React.JSX.Element | null {
 export function Sidebar(): React.JSX.Element {
   const view = useAppStore((store) => store.view)
   const setView = useAppStore((store) => store.setView)
+  const openWorkshop = useAppStore((store) => store.openWorkshop)
   const owned = useAppStore((store) =>
     store.library.status === 'ready' ? store.library.apps.length : undefined
   )
@@ -125,6 +126,12 @@ export function Sidebar(): React.JSX.Element {
         count={owned}
         current={view.name === 'library' || view.name === 'game'}
         onClick={() => setView({ name: 'library' })}
+      />
+      <NavItem
+        icon={Puzzle}
+        label="Workshop"
+        current={view.name === 'workshop' || view.name === 'workshop-item'}
+        onClick={() => openWorkshop()}
       />
       <div className={sectionClass}>Transfers</div>
       <NavItem

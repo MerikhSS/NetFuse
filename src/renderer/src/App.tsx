@@ -16,6 +16,8 @@ import { ErrorScreen } from './screens/ErrorScreen'
 import { GameScreen } from './screens/GameScreen'
 import { LibraryScreen } from './screens/LibraryScreen'
 import { LoginScreen } from './screens/LoginScreen'
+import { WorkshopItemScreen } from './screens/WorkshopItemScreen'
+import { WorkshopScreen } from './screens/WorkshopScreen'
 import { useAppStore } from './store/useAppStore'
 
 function assertNever(status: never): never {
@@ -61,6 +63,10 @@ function CurrentScreen(): React.JSX.Element {
       return <LibraryScreen />
     case 'game':
       return <GameScreen key={view.appId} appId={view.appId} />
+    case 'workshop':
+      return <WorkshopScreen />
+    case 'workshop-item':
+      return <WorkshopItemScreen key={view.item.publishedFileId} item={view.item} />
     case 'downloads':
       return <DownloadsScreen />
     case 'download':
@@ -68,7 +74,8 @@ function CurrentScreen(): React.JSX.Element {
   }
 }
 
-/** Logged in: a launcher's library, a game, or the downloads, with the way between them. */
+/** Logged in: a launcher's library, a game, the Workshop, or the downloads, with the way between
+ * them. */
 function Shell(): React.JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col">

@@ -7,7 +7,7 @@ import { useDownloadActions, useDownloadActionsState } from '../components/downl
 import { ACTION_META, toolbarLabel } from '../components/downloadActionMeta'
 import { MoreActionsMenu } from '../components/MoreActionsMenu'
 import { DownloadFilterMenu } from '../components/DownloadFilterMenu'
-import { GameCapsule } from '../components/GameArt'
+import { DownloadPicture } from '../components/GameArt'
 import { CombineDiagram } from '../components/CombineDiagram'
 import { networkStatusText } from '../components/NetworkRow'
 import { scheduleMessage, scheduleWindow } from '@shared/downloadSchedule'
@@ -516,7 +516,7 @@ const DownloadRow = memo(function DownloadRow({
         className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <div className="h-12 w-8 shrink-0 overflow-hidden rounded-md ring-1 ring-foreground/10">
-          <GameCapsule appId={item.app.appId} name={item.fileName} small />
+          <DownloadPicture download={item} />
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <div className="flex min-w-0 items-center gap-2">

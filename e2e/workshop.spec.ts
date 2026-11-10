@@ -8,7 +8,7 @@ import {
   workshopPreview,
   workshopQuery
 } from '../src/main/steam/workshop'
-import { gameState } from '../src/renderer/src/utils/gameState'
+import { gameState, workshopState } from '../src/renderer/src/utils/gameState'
 import type { DownloadState, FinishedDownload } from '../src/shared/types'
 
 // What NetFuse makes of a game's Steam Workshop: the queries it sends, and the items it lists,
@@ -179,4 +179,18 @@ test('a download of a game’s Workshop item is never taken for the game’s own
     kind: 'downloading',
     downloadId: 'game'
   })
+
+  // The item's own state is its downloads', and never the game's.
+  const id = '2863190123456789'
+  expect(workshopState(id, { mod, game }, [])).toMatchObject({
+    kind: 'downloading',
+    downloadId: 'mod',
+    percent: 40
+  })
+  expect(workshopState(id, { game }, [finishedMod])).toEqual({
+    kind: 'installed',
+    downloadId: 'mod'
+  })
+  expect(workshopState(id, { game }, [{ ...finishedMod, missing: true }])).toEqual({ kind: 'none' })
+  expect(workshopState('2863190999999999', { mod }, [finishedMod])).toEqual({ kind: 'none' })
 })

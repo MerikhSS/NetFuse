@@ -1,8 +1,8 @@
 import type { SteamAppDetails } from '@shared/steam'
-import { AlertTriangle, Check, ChevronLeft } from 'lucide-react'
+import { AlertTriangle, Check, ChevronLeft, Puzzle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { GameCapsule, GameHero } from '../components/GameArt'
-import { useDownloadActions } from '../components/downloadActionsContext'
+import { StateCard } from '../components/StateCard'
 import { FamilySharing } from '../components/steam/FamilySharing'
 import { InstallOptions } from '../components/steam/SteamAppDetails'
 import { Button } from '../components/ui/button'
@@ -21,6 +21,7 @@ type Load =
 
 export function GameScreen({ appId }: { appId: number }): React.JSX.Element {
   const setView = useAppStore((store) => store.setView)
+  const openWorkshop = useAppStore((store) => store.openWorkshop)
   const owned = useAppStore((store) =>
     store.library.status === 'ready'
       ? store.library.apps.find((app) => app.appId === appId)
@@ -72,11 +73,23 @@ export function GameScreen({ appId }: { appId: number }): React.JSX.Element {
                 <StateLine state={state} />
               </div>
             </div>
+            {owned?.workshop && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="mb-1 ml-auto shrink-0"
+                onClick={() => openWorkshop({ appId })}
+              >
+                <Puzzle data-icon="inline-start" />
+                Workshop
+              </Button>
+            )}
           </div>
         </div>
 
         <div className="flex flex-col gap-4 px-5 pt-2 pb-6">
-          <StateCard state={state} />
+          <StateCard state={state} describe={describeGameState} />
           <section
             aria-label="Install"
             className="flex flex-col gap-3.5 rounded-xl border-[0.5px] border-border bg-card p-4"
@@ -129,61 +142,5 @@ function StateLine({ state }: { state: GameState }): React.JSX.Element | null {
       )}
       {text}
     </span>
-  )
-}
-
-/** A download of the game under way, or the install it left: a way to it. */
-function StateCard({ state }: { state: GameState }): React.JSX.Element | null {
-  const setView = useAppStore((store) => store.setView)
-  const { perform } = useDownloadActions()
-  const download = useAppStore((store) => {
-    if (state.kind === 'none' || state.kind === 'in-steam') return null
-    return (
-      store.downloads[state.downloadId] ??
-      store.history.find((entry) => entry.id === state.downloadId) ??
-      null
-    )
-  })
-  if (!download || state.kind === 'none' || state.kind === 'in-steam') return null
-
-  const going = state.kind !== 'installed'
-  const percent = 'percent' in state ? state.percent : 100
-  return (
-    <section
-      aria-label={going ? 'Download' : 'Installed'}
-      className="flex items-center gap-4 rounded-xl border-[0.5px] border-border bg-card p-4"
-    >
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <div className="text-[13px] font-semibold">{describeGameState(state)}</div>
-        {going ? (
-          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-foreground transition-[width] duration-200"
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-        ) : (
-          <div className="truncate font-mono text-[11.5px] text-muted-foreground">
-            {download.destinationPath}
-          </div>
-        )}
-      </div>
-      {!going && (
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => void perform('reveal', [download])}
-        >
-          {window.netfuse.platform === 'darwin' ? 'Show in Finder' : 'Show in folder'}
-        </Button>
-      )}
-      <Button
-        type="button"
-        variant={going ? 'default' : 'secondary'}
-        onClick={() => setView({ name: 'download', id: download.id })}
-      >
-        {going ? 'Show download' : 'Details'}
-      </Button>
-    </section>
   )
 }

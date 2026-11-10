@@ -5,7 +5,7 @@ import { BlockGrid } from '../components/BlockGrid'
 import { ColorBadge } from '../components/ColorBadge'
 import { CombineDiagram } from '../components/CombineDiagram'
 import { CyclableChip } from '../components/CyclableChip'
-import { GameCapsule } from '../components/GameArt'
+import { DownloadPicture } from '../components/GameArt'
 import { HeroBand } from '../components/HeroBand'
 import { NetworkRow } from '../components/NetworkRow'
 import { DetailHeader } from '../components/DetailHeader'
@@ -308,7 +308,7 @@ export const DownloadingScreen = memo(function DownloadingScreen({
       <div className="shrink-0 p-[16px_20px_0px]">
         <div className="flex items-center gap-[14px]">
           <div className="h-[60px] w-10 shrink-0 overflow-hidden rounded-md ring-1 ring-foreground/10">
-            <GameCapsule appId={download.app.appId} name={download.fileName} small />
+            <DownloadPicture download={download} />
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             <div className="flex min-w-0 items-center gap-2">

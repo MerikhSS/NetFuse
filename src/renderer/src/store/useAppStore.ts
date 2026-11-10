@@ -1,6 +1,12 @@
 import { applyDownloadUpdate } from '@shared/downloadUpdate'
 import { describeError } from '@shared/errors'
-import type { SteamLoginState, SteamOwnedApp } from '@shared/steam'
+import type {
+  SteamLoginState,
+  SteamOwnedApp,
+  WorkshopItem,
+  WorkshopPage,
+  WorkshopSort
+} from '@shared/steam'
 import type {
   AppSettings,
   DownloadSchedule,
@@ -19,11 +25,14 @@ export type DownloadFilter = 'all' | 'progress' | 'finished' | 'failed'
 
 type LoadStatus = 'idle' | 'loading' | 'ready' | 'error'
 
-/** What the window shows: a launcher's library (Steam's, so far), one game, the list of
- * downloads, or one download. */
+/** What the window shows: a launcher's library (Steam's, so far), one game, the Workshop (the
+ * game chosen in it, or the games to choose from) and one of its items, the list of downloads, or
+ * one download. */
 export type View =
   | { name: 'library' }
   | { name: 'game'; appId: number }
+  | { name: 'workshop' }
+  | { name: 'workshop-item'; item: WorkshopItem }
   | { name: 'downloads' }
   | { name: 'download'; id: string }
 
@@ -34,6 +43,26 @@ export type LibraryLoad =
   | { status: 'error'; message: string }
 
 export type LibraryFilter = 'all' | 'installed' | 'not-installed'
+
+/** What the Workshop lists: a game's items, in one of Steam's orders or matching a search. */
+export interface WorkshopBrowse {
+  /** null until a game is chosen. */
+  appId: number | null
+  sort: WorkshopSort
+  search: string
+}
+
+/** The items listed so far for one WorkshopBrowse, page after page. */
+export interface WorkshopList {
+  /** The browse they were asked for: an answer for another one, come late, is dropped. */
+  of: WorkshopBrowse
+  status: 'loading' | 'ready' | 'error'
+  items: WorkshopItem[]
+  total: number
+  /** Where Steam's next page starts; absent on the last. */
+  nextCursor?: string
+  error?: string
+}
 
 /** Which of the library's apps are listed: games (demos and betas too), tools (Steam's tools and
  * software), or both. */
@@ -69,6 +98,10 @@ interface AppStore {
   libraryKind: LibraryKind
   /** The apps the Steam client itself has installed on this computer. */
   clientApps: number[]
+  /** The Workshop's game, order and search, kept while the window shows other things, and what
+   * it has listed. */
+  workshop: WorkshopBrowse
+  workshopList: WorkshopList | null
   /** Persisted — how many downloads run at once; the rest wait in the queue. */
   downloadsAtOnce: number
   /** Persisted — the speed limits (see AppSettings). */
@@ -95,6 +128,12 @@ interface AppStore {
   setView: (view: View) => void
   /** Opens a game's own page. */
   openGame: (appId: number) => void
+  /** Opens the Workshop: a game's, with `browse` (its search, say) when given. */
+  openWorkshop: (browse?: Partial<WorkshopBrowse>) => void
+  /** Changes what the Workshop lists, and lists its first page. */
+  browseWorkshop: (browse: Partial<WorkshopBrowse>) => void
+  /** Lists the Workshop's first page, unless it's listed already; `more` lists the next. */
+  loadWorkshop: (more?: boolean) => Promise<void>
   receiveSteamLogin: (state: SteamLoginState) => void
   /** Lists the library, once; `refresh` asks Steam again. */
   loadLibrary: (refresh?: boolean) => Promise<void>
@@ -110,6 +149,9 @@ interface AppStore {
   setSpeedUnit: (unit: SpeedUnit) => void
   setDestinationDir: (dir: string) => void
 }
+
+const sameBrowse = (a: WorkshopBrowse | undefined, b: WorkshopBrowse): boolean =>
+  a !== undefined && a.appId === b.appId && a.sort === b.sort && a.search.trim() === b.search.trim()
 
 // Settings saved by the main process, read once before the first paint (see InitialState).
 const initial = window.netfuse.initialState
@@ -143,6 +185,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   libraryFilter: 'all',
   libraryKind: 'games',
   clientApps: [],
+  workshop: { appId: null, sort: 'popular', search: '' },
+  workshopList: null,
   downloadsAtOnce: initial.downloadsAtOnce,
   speedLimit: initial.speedLimit,
   slowMode: initial.slowMode,
@@ -209,12 +253,78 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   openGame: (appId) => set({ view: { name: 'game', appId } }),
 
+  openWorkshop: (browse) => {
+    set({ view: { name: 'workshop' } })
+    if (browse) get().browseWorkshop(browse)
+  },
+
+  browseWorkshop: (browse) => {
+    const workshop = { ...get().workshop, ...browse }
+    // Another game's Workshop isn't searched for what the last one was.
+    if (browse.appId !== undefined && browse.appId !== get().workshop.appId) {
+      workshop.search = browse.search ?? ''
+    }
+    set({ workshop })
+    // A new game or order starts from its first page; the same one keeps what's listed.
+    if (!sameBrowse(get().workshopList?.of, workshop)) void get().loadWorkshop()
+  },
+
+  loadWorkshop: async (more = false) => {
+    const { workshop, workshopList } = get()
+    if (workshop.appId === null) return
+    const listed = sameBrowse(workshopList?.of, workshop) ? workshopList : null
+    if (more) {
+      if (!listed?.nextCursor || listed.status === 'loading') return
+    } else if (listed && listed.status !== 'error') return
+    const cursor = more ? listed?.nextCursor : undefined
+    const before = more && listed ? listed.items : []
+    const loading: WorkshopList = {
+      of: workshop,
+      status: 'loading',
+      items: before,
+      total: listed?.total ?? 0,
+      nextCursor: listed?.nextCursor
+    }
+    set({ workshopList: loading })
+    let page: WorkshopPage
+    try {
+      page = await window.netfuse.steamWorkshop({
+        appId: workshop.appId,
+        sort: workshop.sort,
+        search: workshop.search.trim() || undefined,
+        cursor
+      })
+    } catch (error) {
+      if (get().workshopList === loading) {
+        set({ workshopList: { ...loading, status: 'error', error: describeError(error) } })
+      }
+      return
+    }
+    if (get().workshopList !== loading) return
+    // A page can repeat an item the one before had, when the order shifted in between.
+    const seen = new Set(before.map((item) => item.publishedFileId))
+    set({
+      workshopList: {
+        of: workshop,
+        status: 'ready',
+        items: [...before, ...page.items.filter((item) => !seen.has(item.publishedFileId))],
+        total: page.total,
+        nextCursor: page.nextCursor
+      }
+    })
+  },
+
   receiveSteamLogin: (steamLogin) => {
     const was = get().steamLogin
     set({ steamLogin })
     // Another account owns other things: back to a library to be listed afresh.
     if (was?.status === 'logged-in' && steamLogin.status !== 'logged-in') {
-      set({ library: { status: 'idle' }, view: { name: 'library' } })
+      set({
+        library: { status: 'idle' },
+        view: { name: 'library' },
+        workshop: { appId: null, sort: 'popular', search: '' },
+        workshopList: null
+      })
     }
   },
 

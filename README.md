@@ -48,6 +48,7 @@ How much faster depends on your networks: each one adds speed only if it has its
 - **Every network at once**: a game's chunks are spread across the connections you choose, and faster networks fetch more
 - **Log in the way Steam lets you**: account name and password with a Steam Guard code (email or the Steam Mobile App), or a QR code
 - **Choose what to install**: branch, system, architecture, language and depots, with download size, install size and free space shown
+- **The Steam Workshop** of every game you own with one: browse it in Steam's orders or search it, and download mods, maps and more into a folder you pick, over every network
 - **Auto-detect** your Steam libraries' `steamapps/common` folders, on any drive
 - **Install over an existing folder**: what's already there and correct is kept, and only what's missing or different is fetched
 - **Every chunk is checked** against Steam's manifest before it's written. A damaged copy is fetched again from another server.
@@ -61,6 +62,8 @@ How much faster depends on your networks: each one adds speed only if it has its
 3. Click **Auto-detect** to save it into your Steam library, or **Change** to pick another folder.
 4. Click **Download**. Its screen shows each network's share and speed as it goes.
 5. In Steam, click **Install** on the game, with the same library selected. Steam finds the files NetFuse downloaded and checks them instead of downloading them again.
+
+For mods, open **Workshop** in the sidebar (or **Workshop** on a game's page), pick an item and click **Download**. It goes into a folder named after it, in the folder you choose. NetFuse doesn't subscribe to it in Steam, so point the game at that folder the way the game takes mods.
 
 ## Install
 
@@ -111,6 +114,7 @@ This is a preview. Downloads are tested end to end against a stand-in for Steam,
 
 - Steam lists a game only after you click **Install** on it in Steam. Having NetFuse register it with Steam is planned.
 - Password-protected beta branches aren't supported.
+- Some older Workshop items are still in Steam's old storage: they're listed, but can't be downloaded.
 - Steam is the only launcher so far. The window has room for others.
 
 The design and its reasoning are in [docs/steam/DESIGN.md](docs/steam/DESIGN.md). Please report problems in [the issues](https://github.com/MerikhSS/NetFuse/issues).

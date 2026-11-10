@@ -1,9 +1,11 @@
+import type { DownloadState, FinishedDownload } from '@shared/types'
 import { cn } from 'cn'
 import { useState } from 'react'
 
 // A game's pictures, as the main process keeps them (see main/steam/art.ts). Not every game has
 // every picture: an old one may have no portrait capsule, a small one no banner. Each falls back
-// to what there is, and failing everything to the game's name on a gray of its own.
+// to what there is, and failing everything to the game's name on a gray of its own. A Workshop
+// item has one picture, its preview, or the same gray.
 
 type ArtKind = 'capsule' | 'header' | 'hero'
 
@@ -48,21 +50,26 @@ export function GameCapsule({
   appId,
   name,
   small,
+  lazy,
   className
 }: {
   appId: number
   name: string
   /** A thumbnail beside the game's name. */
   small?: boolean
+  /** In a long list drawn whole: fetched only once it's scrolled near. */
+  lazy?: boolean
   className?: string
 }): React.JSX.Element {
   const [kind, setKind] = useState<ArtKind | null>('capsule')
+  const loading = lazy ? 'lazy' : undefined
   return (
     <div className={cn('relative size-full overflow-hidden', className)}>
       {kind === 'capsule' && (
         <img
           src={artUrl(appId, 'capsule')}
           alt=""
+          loading={loading}
           draggable={false}
           onError={() => setKind('header')}
           className="size-full object-cover"
@@ -74,12 +81,14 @@ export function GameCapsule({
             src={artUrl(appId, 'header')}
             alt=""
             aria-hidden
+            loading={loading}
             draggable={false}
             className="absolute inset-0 size-full scale-125 object-cover opacity-80 blur-xl"
           />
           <img
             src={artUrl(appId, 'header')}
             alt=""
+            loading={loading}
             draggable={false}
             onError={() => setKind(null)}
             className="relative size-full object-contain"
@@ -116,5 +125,54 @@ export function GameHero({ appId }: { appId: number }): React.JSX.Element {
         />
       )}
     </div>
+  )
+}
+
+/** A Workshop item's preview, fitted to a square by Steam's image servers (see
+ * main/steam/art.ts); an item without one gets a gray of its own, as a game does. */
+export function WorkshopPicture({
+  publishedFileId,
+  name,
+  small,
+  className
+}: {
+  publishedFileId: string
+  name: string
+  small?: boolean
+  className?: string
+}): React.JSX.Element {
+  const [failed, setFailed] = useState(false)
+  return (
+    <div className={cn('relative size-full overflow-hidden bg-black', className)}>
+      {failed ? (
+        // The id's last digits pick the shade: an id is too big a number for the arithmetic.
+        <Placeholder appId={Number(publishedFileId.slice(-6))} name={name} small={small} />
+      ) : (
+        <img
+          src={`game-art://workshop/${publishedFileId}`}
+          alt=""
+          draggable={false}
+          onError={() => setFailed(true)}
+          className="size-full object-cover"
+        />
+      )}
+    </div>
+  )
+}
+
+/** A download's thumbnail beside its name: its game's picture, or its Workshop item's. */
+export function DownloadPicture({
+  download
+}: {
+  download: DownloadState | FinishedDownload
+}): React.JSX.Element {
+  return download.workshop ? (
+    <WorkshopPicture
+      publishedFileId={download.workshop.publishedFileId}
+      name={download.fileName}
+      small
+    />
+  ) : (
+    <GameCapsule appId={download.app.appId} name={download.fileName} small />
   )
 }

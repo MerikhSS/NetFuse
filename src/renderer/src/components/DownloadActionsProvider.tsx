@@ -48,16 +48,20 @@ export function DownloadActionsProvider({
           return failed ? fail(failed.reason) : true
         }
         case 'again': {
-          // Nothing of it can be kept: it goes, and the game's page opens to start over. Only once
-          // it's really gone, so the new one can't collide with what's left of it.
+          // Nothing of it can be kept: it goes, and the game's page opens to start over (a Workshop
+          // item's game's Workshop, searched for it). Only once it's really gone, so the new one
+          // can't collide with what's left of it.
           const [item] = targets
           try {
             await window.netfuse.removeDownload(item.id)
           } catch (cause) {
             return fail(cause)
           }
-          useAppStore.getState().forgetDownload(item.id)
-          openGame(item.app.appId)
+          const store = useAppStore.getState()
+          store.forgetDownload(item.id)
+          if (item.workshop) {
+            store.openWorkshop({ appId: item.app.appId, search: item.workshop.title })
+          } else openGame(item.app.appId)
           return true
         }
         case 'open':

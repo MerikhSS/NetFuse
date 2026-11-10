@@ -1,10 +1,13 @@
+import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { Locator } from '@playwright/test'
 import { expect, test, type NetFuseApp } from './fixtures'
 import { syntheticApp, type SteamOrigin } from './steamOrigin'
 
 // A game's Steam Workshop, through the API the window uses: listed in Steam's orders and searched,
 // and an item downloaded into a folder named after it, through the same engine as a game, checked
-// byte for byte by the automatic checks. The pure parts are in workshop.spec.ts.
+// byte for byte by the automatic checks. Then the Workshop tab, driven as a person would. The pure
+// parts are in workshop.spec.ts.
 
 const SHIPS = '3000000001'
 const LANES = '3000000002'
@@ -186,5 +189,132 @@ test.describe('the Steam Workshop', () => {
     expect(steam.workshopArtRequests).toEqual([SHIPS, LANES])
     expect(await loadPicture(netfuse, 'game-art://workshop/0123')).toBe(0)
     expect(await loadPicture(netfuse, 'game-art://workshop/..%2F..%2Fsecret')).toBe(0)
+  })
+})
+
+/** The folder picker is native OS UI: it answers with the test's folder. */
+async function stubFolderPicker(netfuse: NetFuseApp, destination: string): Promise<void> {
+  await netfuse.evaluateMain(({ dialog }, dest) => {
+    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [dest] })) as never
+  }, destination)
+}
+
+const nav = (netfuse: NetFuseApp, name: string): Locator =>
+  netfuse.page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name, exact: true })
+const items = (netfuse: NetFuseApp): Locator =>
+  netfuse.page.getByRole('list', { name: 'Workshop items' }).getByRole('listitem')
+
+test.describe('the Workshop tab', () => {
+  test('lists a game’s Workshop, orders and searches it, and downloads an item @smoke', async ({
+    netfuse,
+    serveSteam,
+    dirs
+  }) => {
+    const steam = await serveSteam()
+    await stubFolderPicker(netfuse, dirs.dest)
+    await netfuse.loginSteam()
+    const page = netfuse.page
+
+    // First the games with a Workshop, to choose one.
+    await nav(netfuse, 'Workshop').click()
+    await page
+      .getByRole('list', { name: 'Games with a Workshop' })
+      .getByRole('button', { name: 'NetFuse Test Game' })
+      .click()
+    await expect(page.getByRole('heading', { name: 'NetFuse Test Game Workshop' })).toBeVisible()
+    await expect(items(netfuse)).toHaveText([
+      /^Faster Lanes/,
+      /^Bigger Ships/,
+      // In Steam's old storage: listed, and said not to be downloadable.
+      /^Old Map Pack.*Can’t be downloaded/
+    ])
+    // Each picture comes from Steam's Workshop images, through the app.
+    await expect(items(netfuse).first().locator('img')).toHaveAttribute(
+      'src',
+      `game-art://workshop/${LANES}`
+    )
+    await expect(page.getByText('3 of 3')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Order' }).click()
+    await page.getByRole('menuitemradio', { name: 'Recently updated' }).click()
+    await expect(items(netfuse).first()).toContainText('Bigger Ships')
+    expect(steam.workshopQueries.at(-1)).toMatchObject({ queryType: 21 })
+
+    // A search lists the best matches, whatever the order.
+    await page.getByLabel('Search the Workshop').fill('lanes')
+    await expect(items(netfuse)).toHaveText([/^Faster Lanes/])
+    await expect(page.getByRole('button', { name: 'Order' })).toHaveText('Best matches')
+    await expect(page.getByRole('button', { name: 'Order' })).toBeDisabled()
+    await page.getByLabel('Search the Workshop').fill('')
+    await expect(items(netfuse)).toHaveCount(3)
+
+    // An item's page: what it is, then where it goes.
+    await items(netfuse).getByRole('button', { name: 'Bigger Ships' }).click()
+    await expect(page.getByRole('heading', { name: 'Bigger Ships' })).toBeVisible()
+    await expect(page.getByText('Doubles the size of every ship in the game.')).toBeVisible()
+    await expect(page.getByLabel('Tags')).toHaveText('GameplayShips')
+    await page.getByRole('button', { name: 'Change' }).click()
+    await netfuse.expectNextDownload(steam.expectedWorkshopSha(SHIPS))
+    await page.getByRole('button', { name: 'Download', exact: true }).click()
+
+    // Started: its own screen opens, with the item's picture and name.
+    await expect(page.getByRole('table', { name: 'Networks' })).toBeVisible()
+    await expect(page.locator(`img[src="game-art://workshop/${SHIPS}"]`)).toBeVisible()
+    const done = await netfuse.waitForSteamStatus('completed')
+    expect(done.workshop?.publishedFileId).toBe(SHIPS)
+    expect(done.destinationPath).toBe(join(dirs.dest, 'Bigger Ships'))
+
+    // Back in the Workshop, where it was left: the item says it's downloaded, and where to.
+    await nav(netfuse, 'Workshop').click()
+    await expect(items(netfuse).first()).toContainText(/Bigger Ships\s*Downloaded/)
+    await items(netfuse).getByRole('button', { name: 'Bigger Ships' }).click()
+    await expect(page.getByRole('region', { name: 'Installed' })).toContainText(
+      join(dirs.dest, 'Bigger Ships')
+    )
+    await expect(page.getByRole('heading', { name: 'Download again' })).toBeVisible()
+
+    // One in Steam's old storage can't be downloaded, and its page says why.
+    await page.getByRole('button', { name: 'NetFuse Test Game Workshop' }).click()
+    await items(netfuse).getByRole('button', { name: 'Old Map Pack' }).click()
+    await expect(page.getByText(/kept in Steam’s old Workshop storage/)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Download', exact: true })).toHaveCount(0)
+
+    // The game's own page leads to its Workshop, and its library card doesn't count the item.
+    await nav(netfuse, 'Steam').click()
+    await page
+      .getByRole('list', { name: 'Your Steam library' })
+      .getByRole('button', {
+        name: 'NetFuse Test Game'
+      })
+      .click()
+    await expect(page.getByRole('heading', { name: 'Install', exact: true })).toBeVisible()
+    await page.getByRole('main').getByRole('button', { name: 'Workshop', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'NetFuse Test Game Workshop' })).toBeVisible()
+  })
+
+  test('a Workshop download started again opens the game’s Workshop, searched for it', async ({
+    netfuse,
+    serveSteam,
+    dirs
+  }) => {
+    const steam = await serveSteam(syntheticApp(5, 3))
+    const held = holdAfter(steam, 2)
+    await netfuse.startWorkshop(steam, SHIPS)
+    await held
+    await netfuse.quit()
+    steam.release()
+    // Its folder gone while NetFuse was closed, it can't go on: only start again.
+    await rm(join(dirs.dest, 'Bigger Ships'), { recursive: true, force: true })
+    await netfuse.launch()
+    await netfuse.loginSteam()
+
+    await nav(netfuse, 'Downloads').click()
+    await netfuse.page.getByRole('button', { name: 'Download again Bigger Ships' }).click()
+    await expect(
+      netfuse.page.getByRole('heading', { name: 'NetFuse Test Game Workshop' })
+    ).toBeVisible()
+    await expect(netfuse.page.getByLabel('Search the Workshop')).toHaveValue('Bigger Ships')
+    await expect(items(netfuse)).toHaveText([/^Bigger Ships/])
+    expect(await netfuse.api.listDownloads()).toEqual([])
   })
 })

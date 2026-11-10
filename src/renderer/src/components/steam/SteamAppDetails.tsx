@@ -19,8 +19,7 @@ import {
 import { cn } from 'cn'
 import { AlertTriangle, ChevronDown } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useNetworkUsage } from '../../hooks/useNetworks'
-import { useNetworkVisuals } from '../../hooks/useNetworkVisuals'
+import { useNetworkChoice } from '../../hooks/useNetworkChoice'
 import { useAppStore } from '../../store/useAppStore'
 import { describeError, formatBytes, toDisplayPath } from '../../utils/format'
 import { Button } from '../ui/button'
@@ -35,6 +34,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from '../ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { FamilySharing } from './FamilySharing'
+import { NetworkChips } from './NetworkChips'
 
 // One owned game, and what of it to download: the branch, the system, architecture and language
 // (which pick the depots Steam itself would install), the depots themselves, where it goes and
@@ -71,18 +71,16 @@ export function InstallOptions({
   details: Details
   onStarted: (downloadId: string, queued: boolean) => void
 }): React.JSX.Element {
-  const interfaces = useAppStore((store) => store.interfaces)
   const homeDir = useAppStore((store) => store.homeDir)
   const destinationDir = useAppStore((store) => store.destinationDir)
   const setDestinationDir = useAppStore((store) => store.setDestinationDir)
-  const networkPreferences = useAppStore((store) => store.networkPreferences)
   const full = useAppStore(
     (store) =>
       Object.values(store.downloads).filter((download) => download.status === 'downloading')
         .length >= store.downloadsAtOnce
   )
-  const networkVisual = useNetworkVisuals()
-  const usage = useNetworkUsage(true)
+  const networks = useNetworkChoice()
+  const { networkIds } = networks
 
   // The renderer can't tell the processor; every current Steam client is 64-bit.
   const [selection, setSelection] = useState<SteamSelection>(() => ({
@@ -95,11 +93,6 @@ export function InstallOptions({
   const [chosen, setChosen] = useState<number[]>(() => defaultDepots(details, selection))
   const [adopt, setAdopt] = useState(false)
   const [freeBytes, setFreeBytes] = useState<number | null>(null)
-  const [deselected, setDeselected] = useState<string[]>(() =>
-    Object.entries(useAppStore.getState().networkPreferences)
-      .filter(([, preference]) => preference.off)
-      .map(([id]) => id)
-  )
   const [start, setStart] = useState<Start>({ status: 'idle' })
   const [error, setError] = useState<string | null>(null)
   const [detect, setDetect] = useState<Detect>({ status: 'idle' })
@@ -132,21 +125,6 @@ export function InstallOptions({
     const next = { ...selection, ...patch }
     setSelection(next)
     setChosen(defaultDepots(details, next))
-  }
-
-  const isReached = (id: string): boolean => {
-    const dataLimit = networkPreferences[id]?.dataLimit
-    return dataLimit !== undefined && (usage[id] ?? 0) >= dataLimit
-  }
-  const availableIds = interfaces.map((iface) => iface.id).filter((id) => !isReached(id))
-  const networkIds = availableIds.filter((id) => !deselected.includes(id))
-  const toggleNetwork = (id: string): void => {
-    if (isReached(id)) return
-    setDeselected((previous) => {
-      if (previous.includes(id)) return previous.filter((entry) => entry !== id)
-      const remaining = availableIds.filter((other) => !previous.includes(other) && other !== id)
-      return remaining.length === 0 ? previous : [...previous, id]
-    })
   }
 
   const picked = details.depots.filter((depot) => chosen.includes(depot.depotId))
@@ -419,40 +397,7 @@ export function InstallOptions({
           <div className={cn(labelClass, 'pt-1.5')} id="steam-networks">
             Networks
           </div>
-          <div
-            role="group"
-            aria-labelledby="steam-networks"
-            className="flex min-w-0 flex-1 flex-wrap gap-1.5"
-          >
-            {interfaces.map((iface) => {
-              const visual = networkVisual(iface.id, iface.kind, iface.displayName)
-              const selected = networkIds.includes(iface.id)
-              const reached = isReached(iface.id)
-              return (
-                <button
-                  key={iface.id}
-                  type="button"
-                  aria-pressed={selected}
-                  aria-disabled={reached || undefined}
-                  title={reached ? 'Data limit reached' : undefined}
-                  onClick={() => toggleNetwork(iface.id)}
-                  className={cn(
-                    'flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12.5px] transition-colors',
-                    selected
-                      ? 'border-transparent'
-                      : 'border-border text-[var(--text-secondary)] opacity-70',
-                    reached && 'cursor-not-allowed line-through opacity-50'
-                  )}
-                  style={
-                    selected ? { background: visual.bg, borderColor: visual.border } : undefined
-                  }
-                >
-                  <span className="size-2 rounded-full" style={{ background: visual.solid }} />
-                  {visual.name}
-                </button>
-              )
-            })}
-          </div>
+          <NetworkChips choice={networks} labelledBy="steam-networks" />
         </div>
 
         {start.status === 'confirm' && (
