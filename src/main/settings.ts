@@ -89,6 +89,7 @@ function sanitizeSettings(parsed: unknown): AppSettings {
     settings.speedUnit = parsed.speedUnit
   }
   if (parsed.iphoneTetherPopup === false) settings.iphoneTetherPopup = false
+  if (parsed.workshopAnonymous === true) settings.workshopAnonymous = true
   return settings
 }
 

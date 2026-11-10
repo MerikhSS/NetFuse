@@ -169,6 +169,31 @@ export interface WorkshopPage {
   nextCursor?: string
 }
 
+/** Which games' Workshops to list beyond the account's own (the Workshop tab's anonymous
+ * switch): Steam's store, most popular first, or searched. */
+export interface WorkshopGamesQuery {
+  /** Words in the game's name. */
+  search?: string
+  /** Where the page before ended (WorkshopGamesPage.nextStart); absent for the first. */
+  start?: number
+}
+
+/** A game whose Workshop NetFuse can download from. */
+export interface WorkshopGame {
+  appId: number
+  name: string
+  /** The account owns it: its Workshop comes through the account. Otherwise Steam lets its
+   * anonymous account have it. */
+  owned: boolean
+}
+
+export interface WorkshopGamesPage {
+  games: WorkshopGame[]
+  /** Where the next page of Steam's store starts; absent after the last. A page can hold few
+   * games, or none, when most of Steam's are closed to its anonymous account. */
+  nextStart?: number
+}
+
 /** A Workshop item to download into a folder of the user's choosing. */
 export interface WorkshopPrepareRequest {
   appId: number

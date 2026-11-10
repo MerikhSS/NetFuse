@@ -1,4 +1,4 @@
-import { rm } from 'node:fs/promises'
+import { readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Locator } from '@playwright/test'
 import { expect, test, type NetFuseApp } from './fixtures'
@@ -316,5 +316,201 @@ test.describe('the Workshop tab', () => {
     await expect(netfuse.page.getByLabel('Search the Workshop')).toHaveValue('Bigger Ships')
     await expect(items(netfuse)).toHaveText([/^Bigger Ships/])
     expect(await netfuse.api.listDownloads()).toEqual([])
+  })
+})
+
+// Games the account doesn't own: Steam decides game by game whether its anonymous account may have
+// a Workshop, as SteamCMD's "login anonymous" finds. Only with the Workshop tab's switch on.
+const STORE_GAMES = [
+  { appId: 7001, name: 'Open Sandbox', open: true },
+  { appId: 7002, name: 'Closed Strategy', open: false },
+  // The store lists a soundtrack beside its game: not a game with a Workshop of its own.
+  { appId: 7003, name: 'Open Sandbox Soundtrack', open: true, type: 'Music' }
+]
+
+test.describe('Workshops of games the account doesn’t own', () => {
+  test('with the switch on, a Workshop Steam opens to everyone downloads through its anonymous account @smoke', async ({
+    netfuse,
+    serveSteam,
+    dirs
+  }) => {
+    const steam = await serveSteam(undefined, {
+      ownsApp: false,
+      anonymousWorkshop: true,
+      storeWorkshops: STORE_GAMES
+    })
+    await netfuse.loginSteam()
+    const prepare = (): Promise<unknown> =>
+      netfuse.api.steamPrepareWorkshop({
+        appId: 4000,
+        publishedFileId: SHIPS,
+        destinationDir: dirs.dest,
+        adopt: false
+      })
+
+    // Off, as it starts: neither listed nor downloaded, and nothing asked anonymously.
+    await expect(netfuse.api.steamWorkshop({ appId: 4000, sort: 'popular' })).rejects.toThrow(
+      /doesn’t own this game/
+    )
+    await expect(netfuse.api.steamWorkshopGames({})).rejects.toThrow(/doesn’t own this game/)
+    await expect(prepare()).rejects.toThrow(/doesn’t own this game/)
+    expect(steam.anonymousRequests).toEqual([])
+
+    await netfuse.api.updateSettings({ workshopAnonymous: true })
+    // The store's games with a Workshop, in its order, those Steam keeps to their owners left out.
+    const page = await netfuse.api.steamWorkshopGames({})
+    expect(page).toEqual({
+      games: [
+        { appId: 4000, name: 'NetFuse Test Game', owned: false },
+        { appId: 7001, name: 'Open Sandbox', owned: false }
+      ]
+    })
+    expect(steam.storeSearches[0].get('category2')).toBe('30')
+    expect((await netfuse.api.steamWorkshopGames({ search: 'sandbox' })).games).toEqual([
+      { appId: 7001, name: 'Open Sandbox', owned: false }
+    ])
+    expect(steam.storeSearches.at(-1)?.get('term')).toBe('sandbox')
+
+    expect(await titles(netfuse, { appId: 4000, sort: 'popular' })).toEqual([
+      'Faster Lanes',
+      'Bigger Ships',
+      'Old Map Pack'
+    ])
+    await expect(netfuse.api.steamWorkshop({ appId: 7002, sort: 'popular' })).rejects.toThrow(
+      /doesn’t let anyone download this game’s Workshop/
+    )
+
+    await netfuse.startWorkshop(steam, SHIPS)
+    const done = await netfuse.waitForSteamStatus('completed')
+    expect(done.workshop).toEqual({
+      publishedFileId: SHIPS,
+      title: 'Bigger Ships',
+      anonymous: true
+    })
+    expect(done.destinationPath).toBe(join(dirs.dest, 'Bigger Ships'))
+
+    // The anonymous account was asked for Workshop depots' keys, never a game's own depots.
+    const asked = steam.anonymousRequests.filter((request) =>
+      /^\/cm\/(depotkey|requestcode|token)/.test(request)
+    )
+    expect(asked.length).toBeGreaterThan(0)
+    expect(asked.every((request) => /depot=(4090|7001|7002)(&|$)/.test(request))).toBe(true)
+    // And the game itself still isn't the account's to download.
+    await expect(
+      netfuse.api.steamPrepare({
+        appId: 4000,
+        branch: 'public',
+        depotIds: [4001],
+        destinationDir: dirs.dest,
+        adopt: false
+      })
+    ).rejects.toThrow(/doesn’t own this app/)
+  })
+
+  test('a Workshop Steam keeps to the game’s owners is neither listed nor downloaded', async ({
+    netfuse,
+    serveSteam,
+    dirs
+  }) => {
+    await serveSteam(undefined, { ownsApp: false, storeWorkshops: STORE_GAMES })
+    await netfuse.loginSteam()
+    await netfuse.api.updateSettings({ workshopAnonymous: true })
+    expect((await netfuse.api.steamWorkshopGames({})).games).toEqual([
+      { appId: 7001, name: 'Open Sandbox', owned: false }
+    ])
+    await expect(netfuse.api.steamWorkshop({ appId: 4000, sort: 'popular' })).rejects.toThrow(
+      /doesn’t let anyone download this game’s Workshop/
+    )
+    await expect(
+      netfuse.api.steamPrepareWorkshop({
+        appId: 4000,
+        publishedFileId: SHIPS,
+        destinationDir: dirs.dest,
+        adopt: false
+      })
+    ).rejects.toThrow(/doesn’t let anyone download this game’s Workshop/)
+  })
+
+  test('the account’s own game is still its own, with the switch on', async ({
+    netfuse,
+    serveSteam
+  }) => {
+    const steam = await serveSteam(undefined, { storeWorkshops: STORE_GAMES })
+    await netfuse.loginSteam()
+    await netfuse.api.updateSettings({ workshopAnonymous: true })
+    expect((await netfuse.api.steamWorkshopGames({})).games).toEqual([
+      { appId: 4000, name: 'NetFuse Test Game', owned: true },
+      { appId: 7001, name: 'Open Sandbox', owned: false }
+    ])
+    await netfuse.startWorkshop(steam, LANES)
+    const done = await netfuse.waitForSteamStatus('completed')
+    expect(done.workshop).toEqual({ publishedFileId: LANES, title: 'Faster Lanes' })
+    expect(steam.anonymousRequests.some((request) => request.includes('depot=4090'))).toBe(false)
+  })
+
+  test('quit and relaunched, an anonymous download resumes with no login of the user’s', async ({
+    netfuse,
+    serveSteam
+  }) => {
+    const steam = await serveSteam(syntheticApp(5, 3), { ownsApp: false, anonymousWorkshop: true })
+    await netfuse.loginSteam()
+    await netfuse.api.updateSettings({ workshopAnonymous: true })
+    const held = holdAfter(steam, 2)
+    const id = await netfuse.startWorkshop(steam, SHIPS)
+    await held
+    await netfuse.quit()
+    steam.release()
+
+    await netfuse.launch()
+    expect((await netfuse.api.steamLoginState()).status).toBe('logged-out')
+    const restored = await netfuse.byId(id)
+    expect(restored?.workshop).toMatchObject({ title: 'Bigger Ships', anonymous: true })
+    await netfuse.api.resumeDownload(id)
+    const done = await netfuse.waitForSteamStatus('completed')
+    expect(done.workshop?.anonymous).toBe(true)
+  })
+
+  test('the switch in the window lists the store’s open Workshops, and an item downloads @smoke', async ({
+    netfuse,
+    serveSteam,
+    dirs
+  }) => {
+    const steam = await serveSteam(undefined, {
+      ownsApp: false,
+      anonymousWorkshop: true,
+      storeWorkshops: STORE_GAMES
+    })
+    await stubFolderPicker(netfuse, dirs.dest)
+    await netfuse.loginSteam()
+    const page = netfuse.page
+    const games = page.getByRole('list', { name: 'Games with a Workshop' })
+
+    await nav(netfuse, 'Workshop').click()
+    await expect(
+      page.getByText('None of the games this account owns has a Steam Workshop.')
+    ).toBeVisible()
+    await page.getByRole('switch', { name: 'Games you don’t own' }).click()
+    await expect(games.getByRole('button')).toHaveText(['NetFuse Test Game', 'Open Sandbox'])
+    // Kept: the next time the window opens, it's on.
+    await expect
+      .poll(async () => {
+        const saved = await readFile(join(dirs.userData, 'app-settings.json'), 'utf8')
+        return JSON.parse(saved).workshopAnonymous
+      })
+      .toBe(true)
+
+    await page.getByLabel('Search Steam').fill('sandbox')
+    await expect(games.getByRole('button')).toHaveText(['Open Sandbox'])
+    await page.getByLabel('Search Steam').fill('')
+    await games.getByRole('button', { name: 'NetFuse Test Game' }).click()
+    await expect(page.getByRole('heading', { name: 'NetFuse Test Game Workshop' })).toBeVisible()
+    await items(netfuse).getByRole('button', { name: 'Bigger Ships' }).click()
+    await expect(page.getByText(/comes through Steam’s anonymous account/)).toBeVisible()
+    await page.getByRole('button', { name: 'Change' }).click()
+    await netfuse.expectNextDownload(steam.expectedWorkshopSha(SHIPS))
+    await page.getByRole('button', { name: 'Download', exact: true }).click()
+    await expect(page.getByRole('table', { name: 'Networks' })).toBeVisible()
+    const done = await netfuse.waitForSteamStatus('completed')
+    expect(done.workshop?.anonymous).toBe(true)
   })
 })

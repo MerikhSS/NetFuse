@@ -22,10 +22,14 @@ const labelClass = 'w-20 shrink-0 text-[12.5px] text-[var(--text-secondary)]'
 
 export function WorkshopItemScreen({ item }: { item: WorkshopItem }): React.JSX.Element {
   const setView = useAppStore((store) => store.setView)
-  const gameName = useAppStore((store) =>
+  const owned = useAppStore((store) =>
     store.library.status === 'ready'
-      ? store.library.apps.find((app) => app.appId === item.appId)?.name
+      ? store.library.apps.find((app) => app.appId === item.appId)
       : undefined
+  )
+  const gameName = useAppStore(
+    (store) =>
+      owned?.name ?? (store.workshop.appId === item.appId ? store.workshop.name : undefined)
   )
   const state = useWorkshopState(item.publishedFileId)
   const status = describeWorkshopState(state)
@@ -99,6 +103,7 @@ export function WorkshopItemScreen({ item }: { item: WorkshopItem }): React.JSX.
             {item.downloadable ? (
               <DownloadOptions
                 item={item}
+                anonymous={!owned}
                 onStarted={(id, queued) => {
                   // Its own screen opens, unless it only joined the queue: then this page says so.
                   if (!queued) setView({ name: 'download', id })
@@ -128,9 +133,12 @@ type Start =
  * out in the main process first (its file list fetched, a folder already there checked). */
 function DownloadOptions({
   item,
+  anonymous,
   onStarted
 }: {
   item: WorkshopItem
+  /** The account doesn't own the game. */
+  anonymous: boolean
   onStarted: (downloadId: string, queued: boolean) => void
 }): React.JSX.Element {
   const homeDir = useAppStore((store) => store.homeDir)
@@ -229,6 +237,12 @@ function DownloadOptions({
         <div className="text-[12px] leading-snug text-muted-foreground">
           It goes into a folder named after it. Point the game at it the way the game takes mods.
         </div>
+        {anonymous && (
+          <div className="text-[12px] leading-snug text-muted-foreground">
+            This game isn’t in your Steam library: the item comes through Steam’s anonymous account,
+            which Steam lets have this game’s Workshop.
+          </div>
+        )}
         <div className="font-mono text-[11.5px] text-muted-foreground">
           {[
             item.size > 0 && `${formatBytes(item.size)} installed`,

@@ -170,8 +170,10 @@ export interface SteamDownloadState extends DownloadStateBase {
   app: { appId: number; name: string; branch: string; buildId?: string }
   depots: { depotId: number; manifestId: string; name: string }[]
   /** A Workshop item of `app`, rather than the app itself: its one depot is the app's Workshop
-   * depot, and it installs into a folder named after the item. */
-  workshop?: { publishedFileId: string; title: string }
+   * depot, and it installs into a folder named after the item. `anonymous`: the account doesn't
+   * own the game, and the item comes through Steam's anonymous account instead (see
+   * main/steam/anonymous.ts). */
+  workshop?: { publishedFileId: string; title: string; anonymous?: boolean }
   fileCount: number
   installBytes: number
   /** Installed into a folder that already existed: removing it never trashes the folder, and
@@ -273,6 +275,9 @@ export interface AppSettings {
   /** Only ever saved as false, by "Never show again": the popup about an iPhone plugged into
    * Windows that isn't a network (see main/network/iphone.ts) shows unless turned off. */
   iphoneTetherPopup?: boolean
+  /** Only ever saved as true, by the Workshop tab's switch: the Workshops of games the account
+   * doesn't own are listed and downloaded too, where Steam lets its anonymous account have them. */
+  workshopAnonymous?: boolean
 }
 
 /** bytes: MB/s. bits: Mbps, as internet plans and speed tests count them. */
@@ -299,6 +304,7 @@ export interface InitialState {
   speedUnit: SpeedUnit
   /** The last folder picked, if it still exists — otherwise the renderer uses downloadsDir. */
   destinationDir?: string
+  workshopAnonymous: boolean
 }
 
 /** A Steam download worked out by steamPrepare (see SteamPlan). */
@@ -323,8 +329,9 @@ export interface SteamRequestPayload {
   destinationDir: string
   interfaceIds: string[]
   streamsPerNetwork?: number
-  /** A Workshop item's download (see SteamDownloadState.workshop). */
-  workshop?: { publishedFileId: string }
+  /** A Workshop item's download (see SteamDownloadState.workshop): `anonymous`, through Steam's
+   * anonymous account, every run. */
+  workshop?: { publishedFileId: string; anonymous?: boolean }
 }
 
 export type StartDownloadRequest = StartSteamDownloadRequest

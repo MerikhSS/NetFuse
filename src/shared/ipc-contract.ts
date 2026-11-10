@@ -6,6 +6,8 @@ import type {
   SteamOwnedApp,
   SteamPlan,
   SteamPrepareRequest,
+  WorkshopGamesPage,
+  WorkshopGamesQuery,
   WorkshopPage,
   WorkshopPrepareRequest,
   WorkshopQuery
@@ -83,6 +85,9 @@ export interface IpcContract {
   steamPrepare: { args: [request: SteamPrepareRequest]; result: SteamPlan }
   /** A page of the Workshop of a game the account owns. */
   steamWorkshop: { args: [query: WorkshopQuery]; result: WorkshopPage }
+  /** Games on Steam's store whose Workshop NetFuse can download from: the account's, and those
+   * Steam lets its anonymous account have. Only with the Workshop tab's switch on. */
+  steamWorkshopGames: { args: [query: WorkshopGamesQuery]; result: WorkshopGamesPage }
   /** Works out a Workshop item's download into a folder, as steamPrepare does a game's:
    * startDownload takes the plan's id. */
   steamPrepareWorkshop: { args: [request: WorkshopPrepareRequest]; result: SteamPlan }

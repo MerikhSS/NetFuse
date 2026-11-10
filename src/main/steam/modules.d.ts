@@ -45,7 +45,7 @@ declare module 'steam-user' {
     constructor(options?: SteamUserOptions)
     steamID: { getSteamID64(): string } | null
     licenses: License[] | null
-    logOn(details: { refreshToken: string }): void
+    logOn(details: { refreshToken: string } | { anonymous: true }): void
     logOff(): void
     getProductInfo(
       apps: (number | { appid: number; access_token: string })[],

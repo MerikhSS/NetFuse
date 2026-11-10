@@ -14,6 +14,7 @@ import type { Limits } from '../network/limits'
 import { StreamConnection } from '../network/routes'
 import { testKnobs } from '../testKnobs'
 import type { SteamAccount } from './account'
+import type { SteamAnonymous } from './anonymous'
 import { depotUnavailable, isBranchName, manifestFor } from './appInfo'
 import { matchesChunk } from './chunkCodec'
 import { fetchBody } from './chunkFetch'
@@ -33,6 +34,8 @@ import { isPublishedFileId, readWorkshopItem, workshopManifest } from './worksho
 //
 // A Workshop item is planned the same way: its files are one manifest in its game's Workshop
 // depot (see workshop.ts), downloaded as a game's depot is, into a folder named after the item.
+// For a game the account doesn't own, everything Steam is asked for it goes through Steam's
+// anonymous account instead (see anonymous.ts), and the plan says so for the download's runs.
 //
 // A plan waits here, in memory, for startDownload to take it; nothing secret is in it (depot keys
 // are asked for again when the download runs).
@@ -69,8 +72,9 @@ export interface PreparedDownload {
   folderName: string
   /** The files checked, as they were: start refuses a plan whose files changed since. */
   checked: { path: string; size: number; mtimeMs: number }[]
-  /** A Workshop item of the app, rather than the app itself. */
-  workshop?: { publishedFileId: string; title: string }
+  /** A Workshop item of the app, rather than the app itself; `anonymous`, through Steam's
+   * anonymous account. */
+  workshop?: { publishedFileId: string; title: string; anonymous?: boolean }
   createdAt: number
 }
 
@@ -79,7 +83,7 @@ interface PlanParts {
   appId: number
   appName: string
   /** The item's name, for a Workshop item: what the plan's folder is for. */
-  workshop?: { publishedFileId: string; title: string }
+  workshop?: { publishedFileId: string; title: string; anonymous?: boolean }
   folderName: string
   destinationDir: string
   adopt: boolean
@@ -91,6 +95,7 @@ interface PlanParts {
 
 export interface PlannerServices {
   account: SteamAccount
+  anonymous: SteamAnonymous
   library: SteamLibrary
   networks: NetworkMonitor
   limits: Limits
@@ -201,16 +206,20 @@ export class SteamPlanner {
     }
   }
 
-  /** A Workshop item of a game the account owns, into a folder of the user's choosing. What it
-   * is, and where its files are, is asked of Steam: never taken from the window. */
+  /** A Workshop item, into a folder of the user's choosing: of a game the account owns, or one
+   * Steam lets its anonymous account have (see SteamLibrary.workshopAccess). What it is, and where
+   * its files are, is asked of Steam: never taken from the window. */
   async prepareWorkshop(request: WorkshopPrepareRequest): Promise<SteamPlan> {
     checkWorkshopRequest(request)
-    const { account, library } = this.services
+    const { account, anonymous, library } = this.services
     try {
-      const session = await account.current()
-      // Refused unless the account owns the game: Steam gives a Workshop depot's key to its
-      // owners only, and NetFuse doesn't ask otherwise.
-      const details = await library.appDetails(request.appId)
+      const access = await library.workshopAccess(request.appId)
+      const session = access === 'account' ? await account.current() : await anonymous.current()
+      const details =
+        access === 'account'
+          ? await library.appDetails(request.appId)
+          : (await library.gameInfo([request.appId]))[0]
+      if (!details) throw new Error('Steam didn’t send this game’s details.')
       const raw = (await session.workshopDetails([request.publishedFileId])).find(
         (entry) =>
           String((entry as { publishedfileid?: unknown } | null)?.publishedfileid) ===
@@ -225,7 +234,11 @@ export class SteamPlanner {
         )
       }
       const depots = [{ depotId: details.workshopDepot, manifestId, name: item.title }]
-      const workshop = { publishedFileId: item.publishedFileId, title: item.title }
+      const workshop = {
+        publishedFileId: item.publishedFileId,
+        title: item.title,
+        ...(access === 'anonymous' ? { anonymous: true } : {})
+      }
       return await this.plan({
         appId: request.appId,
         appName: details.name,

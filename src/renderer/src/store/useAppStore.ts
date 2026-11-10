@@ -3,6 +3,8 @@ import { describeError } from '@shared/errors'
 import type {
   SteamLoginState,
   SteamOwnedApp,
+  WorkshopGame,
+  WorkshopGamesPage,
   WorkshopItem,
   WorkshopPage,
   WorkshopSort
@@ -48,8 +50,22 @@ export type LibraryFilter = 'all' | 'installed' | 'not-installed'
 export interface WorkshopBrowse {
   /** null until a game is chosen. */
   appId: number | null
+  /** The game's name, when it isn't in the library to look it up by. */
+  name?: string
   sort: WorkshopSort
   search: string
+}
+
+/** The games whose Workshops can be had through Steam's anonymous account (and the account's
+ * own), from Steam's store, page after page: for the Workshop's switch. */
+export interface WorkshopGamesList {
+  /** The search they were asked for: an answer for another one, come late, is dropped. */
+  of: string
+  status: 'loading' | 'ready' | 'error'
+  games: WorkshopGame[]
+  /** Where the store's next page starts; absent after the last. */
+  nextStart?: number
+  error?: string
 }
 
 /** The items listed so far for one WorkshopBrowse, page after page. */
@@ -102,6 +118,10 @@ interface AppStore {
    * it has listed. */
   workshop: WorkshopBrowse
   workshopList: WorkshopList | null
+  /** Persisted — the Workshop also lists games the account doesn't own, whose Workshops Steam lets
+   * its anonymous account have. */
+  workshopAnonymous: boolean
+  workshopGames: WorkshopGamesList | null
   /** Persisted — how many downloads run at once; the rest wait in the queue. */
   downloadsAtOnce: number
   /** Persisted — the speed limits (see AppSettings). */
@@ -134,6 +154,9 @@ interface AppStore {
   browseWorkshop: (browse: Partial<WorkshopBrowse>) => void
   /** Lists the Workshop's first page, unless it's listed already; `more` lists the next. */
   loadWorkshop: (more?: boolean) => Promise<void>
+  setWorkshopAnonymous: (on: boolean) => void
+  /** Lists the store's games for `search`, unless they're listed already; `more`, the next page. */
+  loadWorkshopGames: (search: string, more?: boolean) => Promise<void>
   receiveSteamLogin: (state: SteamLoginState) => void
   /** Lists the library, once; `refresh` asks Steam again. */
   loadLibrary: (refresh?: boolean) => Promise<void>
@@ -155,6 +178,10 @@ const sameBrowse = (a: WorkshopBrowse | undefined, b: WorkshopBrowse): boolean =
 
 // Settings saved by the main process, read once before the first paint (see InitialState).
 const initial = window.netfuse.initialState
+
+/** The Workshop switch's last save: main reads the saved setting before listing the store's games,
+ * so they're asked for only once it's written. */
+let workshopAnonymousSaved: Promise<void> = Promise.resolve()
 
 /** Every setting changes optimistically: the store is updated first so the UI feels instant,
  * then this saves it. The store stays the source of truth either way — a failed save just means
@@ -187,6 +214,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   clientApps: [],
   workshop: { appId: null, sort: 'popular', search: '' },
   workshopList: null,
+  workshopAnonymous: initial.workshopAnonymous,
+  workshopGames: null,
   downloadsAtOnce: initial.downloadsAtOnce,
   speedLimit: initial.speedLimit,
   slowMode: initial.slowMode,
@@ -263,6 +292,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     // Another game's Workshop isn't searched for what the last one was.
     if (browse.appId !== undefined && browse.appId !== get().workshop.appId) {
       workshop.search = browse.search ?? ''
+      workshop.name = browse.name
     }
     set({ workshop })
     // A new game or order starts from its first page; the same one keeps what's listed.
@@ -323,7 +353,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         library: { status: 'idle' },
         view: { name: 'library' },
         workshop: { appId: null, sort: 'popular', search: '' },
-        workshopList: null
+        workshopList: null,
+        workshopGames: null
       })
     }
   },
@@ -338,6 +369,50 @@ export const useAppStore = create<AppStore>((set, get) => ({
     } catch (error) {
       set({ library: { status: 'error', message: describeError(error) } })
     }
+  },
+
+  setWorkshopAnonymous: (workshopAnonymous) => {
+    set({ workshopAnonymous })
+    workshopAnonymousSaved = window.netfuse.updateSettings({ workshopAnonymous }).catch(() => {})
+  },
+
+  loadWorkshopGames: async (search, more = false) => {
+    const of = search.trim()
+    const listed = get().workshopGames?.of === of ? get().workshopGames : null
+    if (more) {
+      if (listed?.nextStart === undefined || listed.status === 'loading') return
+    } else if (listed && listed.status !== 'error') return
+    const before = more && listed ? listed.games : []
+    const loading: WorkshopGamesList = {
+      of,
+      status: 'loading',
+      games: before,
+      nextStart: listed?.nextStart
+    }
+    set({ workshopGames: loading })
+    let page: WorkshopGamesPage
+    try {
+      await workshopAnonymousSaved
+      page = await window.netfuse.steamWorkshopGames({
+        search: of || undefined,
+        start: more ? listed?.nextStart : undefined
+      })
+    } catch (error) {
+      if (get().workshopGames === loading) {
+        set({ workshopGames: { ...loading, status: 'error', error: describeError(error) } })
+      }
+      return
+    }
+    if (get().workshopGames !== loading) return
+    const seen = new Set(before.map((game) => game.appId))
+    set({
+      workshopGames: {
+        of,
+        status: 'ready',
+        games: [...before, ...page.games.filter((game) => !seen.has(game.appId))],
+        nextStart: page.nextStart
+      }
+    })
   },
 
   setLibraryQuery: (libraryQuery) => set({ libraryQuery }),

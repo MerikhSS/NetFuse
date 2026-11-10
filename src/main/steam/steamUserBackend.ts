@@ -411,33 +411,44 @@ export function steamUserBackend(): SteamBackend {
     },
 
     async logOn(refreshToken, accountName) {
-      const SteamUser = await loadUser()
-      const client = new SteamUser({
-        dataDirectory: null,
-        autoRelogin: true,
-        enablePicsCache: false,
-        changelistUpdateInterval: 0,
-        saveAppTickets: false,
-        renewRefreshTokens: true
-      })
-      await within(
-        new Promise<void>((resolve, reject) => {
-          const onError = (error: unknown): void => reject(loginError(error))
-          client.once('error', onError)
-          client.once('loggedOn', () => {
-            client.off('error', onError)
-            resolve()
-          })
-          client.logOn({ refreshToken })
-        }),
-        LOGON_TIMEOUT_MS,
-        'NetFuse couldn’t reach Steam. Check your connection and try again.'
-      ).catch((error) => {
-        client.logOff()
-        client.removeAllListeners()
-        throw error
-      })
-      return new Session(client, accountName)
+      return new Session(await logOnClient({ refreshToken }), accountName)
+    },
+
+    async logOnAnonymous() {
+      return new Session(await logOnClient({ anonymous: true }), '')
     }
   }
+}
+
+/** A steam-user client logged on with `details`: a refresh token, or Steam's anonymous account. */
+async function logOnClient(
+  details: { refreshToken: string } | { anonymous: true }
+): Promise<SteamUserType> {
+  const SteamUser = await loadUser()
+  const client = new SteamUser({
+    dataDirectory: null,
+    autoRelogin: true,
+    enablePicsCache: false,
+    changelistUpdateInterval: 0,
+    saveAppTickets: false,
+    renewRefreshTokens: 'refreshToken' in details
+  })
+  await within(
+    new Promise<void>((resolve, reject) => {
+      const onError = (error: unknown): void => reject(loginError(error))
+      client.once('error', onError)
+      client.once('loggedOn', () => {
+        client.off('error', onError)
+        resolve()
+      })
+      client.logOn(details)
+    }),
+    LOGON_TIMEOUT_MS,
+    'NetFuse couldn’t reach Steam. Check your connection and try again.'
+  ).catch((error) => {
+    client.logOff()
+    client.removeAllListeners()
+    throw error
+  })
+  return client
 }

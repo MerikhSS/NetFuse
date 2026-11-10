@@ -2,7 +2,9 @@ import { expect, test } from '@playwright/test'
 import { hasWorkshop, readAppInfo } from '../src/main/steam/appInfo'
 import {
   isPublishedFileId,
+  readStoreSearch,
   readWorkshopItem,
+  storeSearchParams,
   WORKSHOP_PAGE_SIZE,
   workshopManifest,
   workshopPreview,
@@ -193,4 +195,40 @@ test('a download of a game’s Workshop item is never taken for the game’s own
   })
   expect(workshopState(id, { game }, [{ ...finishedMod, missing: true }])).toEqual({ kind: 'none' })
   expect(workshopState('2863190999999999', { mod }, [finishedMod])).toEqual({ kind: 'none' })
+})
+
+test('Steam’s store is asked for games with a Workshop, and only its apps are taken', () => {
+  const params = storeSearchParams('  stellaris  ', 50)
+  expect(Object.fromEntries(params)).toEqual({
+    category2: '30',
+    json: '1',
+    start: '50',
+    count: '50',
+    term: 'stellaris'
+  })
+  expect(storeSearchParams('', 0).has('term')).toBe(false)
+
+  const logo = (path: string): string =>
+    `https://shared.fastly.steamstatic.com/store_item_assets/steam/${path}/capsule_sm_120.jpg?t=1`
+  expect(
+    readStoreSearch({
+      desc: '',
+      items: [
+        { name: 'Stellaris', logo: logo('apps/281990') },
+        // A bundle or a package isn't an app; the same app twice is once.
+        { name: 'Stellaris Bundle', logo: logo('bundles/1234') },
+        { name: 'Stellaris: Pack', logo: logo('subs/5678') },
+        { name: 'Stellaris again', logo: logo('apps/281990') },
+        { name: 'RimWorld [b]x[/b]', logo: logo('apps/294100') },
+        { name: 42, logo: logo('apps/1') },
+        { name: 'No picture' },
+        { name: 'Too big', logo: logo('apps/99999999999') }
+      ]
+    })
+  ).toEqual([
+    { appId: 281990, name: 'Stellaris' },
+    { appId: 294100, name: 'RimWorld x' }
+  ])
+  for (const value of [null, 'items', { items: 'x' }, []])
+    expect(readStoreSearch(value)).toEqual([])
 })

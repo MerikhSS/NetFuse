@@ -446,7 +446,11 @@ export class DownloadManager {
         target,
         host,
         { file, layout, book, units },
-        { account: this.steam.account, workers: this.steam.workers }
+        {
+          account: this.steam.account,
+          anonymous: this.steam.anonymous,
+          workers: this.steam.workers
+        }
       )
     })
     return runtime
@@ -772,7 +776,10 @@ export class DownloadManager {
       destinationDir,
       interfaceIds: request.interfaceIds,
       streamsPerNetwork: request.streamsPerNetwork,
-      workshop: prepared.workshop && { publishedFileId: prepared.workshop.publishedFileId }
+      workshop: prepared.workshop && {
+        publishedFileId: prepared.workshop.publishedFileId,
+        ...(prepared.workshop.anonymous ? { anonymous: true } : {})
+      }
     }
     return this.newRuntime(
       state,

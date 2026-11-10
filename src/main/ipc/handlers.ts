@@ -19,6 +19,7 @@ import {
 import type {
   SteamLoginRequest,
   SteamPrepareRequest,
+  WorkshopGamesQuery,
   WorkshopPrepareRequest,
   WorkshopQuery,
   WorkshopSort
@@ -152,6 +153,23 @@ function checkWorkshopQuery(value: unknown): WorkshopQuery {
       search: query.search as string | undefined,
       cursor: query.cursor as string | undefined
     }
+  }
+  throw new Error('Choose what to list again.')
+}
+
+function checkWorkshopGames(value: unknown): WorkshopGamesQuery {
+  const query = value as Partial<Record<keyof WorkshopGamesQuery, unknown>> | null
+  if (
+    query !== null &&
+    typeof query === 'object' &&
+    (query.search === undefined ||
+      (typeof query.search === 'string' && query.search.length <= 200)) &&
+    (query.start === undefined ||
+      (Number.isInteger(query.start) &&
+        (query.start as number) >= 0 &&
+        (query.start as number) <= 100_000))
+  ) {
+    return { search: query.search as string | undefined, start: query.start as number | undefined }
   }
   throw new Error('Choose what to list again.')
 }
@@ -296,7 +314,8 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Down
         slowMode: settings.slowMode ?? false,
         slowModeSpeed: settings.slowModeSpeed ?? DEFAULT_SLOW_MODE_SPEED,
         speedUnit: settings.speedUnit ?? 'bytes',
-        destinationDir: destinationExists ? destinationDir : undefined
+        destinationDir: destinationExists ? destinationDir : undefined,
+        workshopAnonymous: settings.workshopAnonymous === true
       } satisfies InitialState
     } catch (error) {
       console.error('[netfuse] failed to read initial state', error)
@@ -309,7 +328,8 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Down
         downloadsAtOnce: DOWNLOADS_AT_ONCE.default,
         slowMode: false,
         slowModeSpeed: DEFAULT_SLOW_MODE_SPEED,
-        speedUnit: 'bytes'
+        speedUnit: 'bytes',
+        workshopAnonymous: false
       } satisfies InitialState
     }
   })
@@ -398,6 +418,9 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Down
   )
   handle('steamWorkshop', async (_event, query) =>
     redacting(() => library.workshop(checkWorkshopQuery(query)))
+  )
+  handle('steamWorkshopGames', async (_event, query) =>
+    redacting(() => library.workshopGames(checkWorkshopGames(query)))
   )
   handle('steamPrepareWorkshop', async (_event, request) =>
     redacting(() => planner.prepareWorkshop(checkWorkshopPrepare(request)))

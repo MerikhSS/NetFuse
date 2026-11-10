@@ -52,11 +52,12 @@ Electron, TypeScript and React desktop app. It downloads the Steam games an acco
 - **The window** (`src/renderer/src/App.tsx`) shows the Steam login until there is one; then a sidebar, the library (`LibraryScreen`), a game's page (`GameScreen`), and the downloads.
 - **Game pictures** come from Steam's store CDN through the main process, as `game-art://steam/<appId>/<kind>` (`steam/art.ts`), cached under `userData/art`; a Workshop item's from Steam's Workshop image servers, as `game-art://workshop/<publishedFileId>`. The renderer's CSP allows that scheme for images and nothing else.
 - **The Workshop** (`steam/workshop.ts`): a game's items are listed with PublishedFile.QueryFiles over the same Steam connection. An item downloads as a Steam download of one depot (the game's Workshop depot, the item's manifest), into a folder of the user's choosing; `SteamDownloadState.workshop` marks it. NetFuse never subscribes or writes to Steam's own Workshop folder.
+  - With the Workshop tab's "Games you don't own" switch on (setting `workshopAnonymous`), a game the account doesn't own is offered when Steam lets its anonymous account have its Workshop depot's key (`steam/anonymous.ts`, as SteamCMD's `login anonymous`). Such games are found with Steam's store search (`steam/store.ts`), and their items download through that account (`workshop.anonymous` in the request payload).
 - **`src/main/testKnobs.ts`** reads `NETFUSE_E2E_*` and `NETFUSE_USER_DATA`, and only in an unpackaged app.
 
 ## Tests
 
-- Playwright drives the real built app through `window.netfuse` (`e2e/fixtures.ts`), against a fake Steam (`e2e/steamOrigin.ts`): its control plane (login, licenses, appinfo, keys), two content servers, the store CDN's pictures, and a Workshop with items and their pictures. A content server can damage, cut, stall or hold a response, return any status, or want a CDN token.
+- Playwright drives the real built app through `window.netfuse` (`e2e/fixtures.ts`), against a fake Steam (`e2e/steamOrigin.ts`): its control plane (login, the anonymous account, licenses, appinfo, keys), two content servers, the store CDN's pictures, the store's search, and a Workshop with items and their pictures. A content server can damage, cut, stall or hold a response, return any status, or want a CDN token.
 - **Automatic checks** run after every test:
   - a `completed` download matches its source byte for byte (`treeSha` of the install folder);
   - anything else leaves nothing of the install behind, and no open handle (`lsof`);
@@ -71,11 +72,12 @@ Electron, TypeScript and React desktop app. It downloads the Steam games an acco
 Design: `docs/steam/DESIGN.md`.
 
 - **Owned content only.** Only apps and depots the logged-in account is licensed for. No license bypass, no DRM circumvention, no anonymous download of paid content.
+  - The one exception is Workshop items, which are free: with the switch on, those Steam itself lets its anonymous account have. That account is never asked for a game's own depots.
 - **Credentials.**
   - Passwords and Steam Guard codes are never stored or logged.
   - Only the refresh token is kept, encrypted with `safeStorage`, and not at all without a real keychain.
   - The renderer only ever sees the login state.
   - Every Steam error goes through `redact()`.
-- **Network calls.** Only to Steam endpoints, the content servers Steam hands out, Steam's store CDN for game pictures, and Steam's Workshop image servers for Workshop items' pictures. Manifests and chunks go through `StreamConnection` and `Limits`.
-- **Owned games only, for the Workshop too.** Only the Workshops of games the account owns are listed or downloaded from.
+- **Network calls.** Only to Steam endpoints, the content servers Steam hands out, Steam's store CDN for game pictures, Steam's store search for games with a Workshop, and Steam's Workshop image servers for Workshop items' pictures. Manifests and chunks go through `StreamConnection` and `Limits`.
+- **The Workshop.** The Workshops of games the account owns are listed and downloaded from. With the switch on, so are those Steam lets its anonymous account have, and no others.
 - **Pure Steam modules** (crypto, codecs, manifest, layout, scheduler, cells, appinfo, workshop) stay free of `electron` and `testKnobs`, so they can be unit-tested.

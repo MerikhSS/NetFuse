@@ -148,3 +148,44 @@ export function readWorkshopItem(raw: unknown, appId: number): WorkshopItem | nu
     downloadable: workshopManifest(raw) !== undefined
   }
 }
+
+// --- Games with a Workshop, from Steam's store ---------------------------------------------------
+
+/** The store's category for games with a Steam Workshop. */
+const WORKSHOP_CATEGORY = '30'
+/** Games asked of the store at once. */
+export const STORE_PAGE_SIZE = 50
+const MAX_STORE_RESULTS = 200
+
+/** The query string of Steam's store search for games with a Workshop: the most popular first, or
+ * those whose names match `search`. */
+export function storeSearchParams(search: string, start: number): URLSearchParams {
+  const params = new URLSearchParams({
+    category2: WORKSHOP_CATEGORY,
+    json: '1',
+    start: String(Math.max(0, Math.floor(start))),
+    count: String(STORE_PAGE_SIZE)
+  })
+  const term = search.trim().slice(0, MAX_SEARCH)
+  if (term) params.set('term', term)
+  return params
+}
+
+/** The apps in an answer of Steam's store search, in its order. The store names each by its
+ * picture's address (…/apps/<appId>/…); a bundle or a package, which isn't an app, is left out. */
+export function readStoreSearch(raw: unknown): { appId: number; name: string }[] {
+  const items = isRecord(raw) && Array.isArray(raw.items) ? raw.items : []
+  const found: { appId: number; name: string }[] = []
+  const seen = new Set<number>()
+  for (const item of items.slice(0, MAX_STORE_RESULTS)) {
+    if (!isRecord(item) || typeof item.name !== 'string' || typeof item.logo !== 'string') continue
+    const match = /\/apps\/(\d{1,10})\//.exec(item.logo)
+    const appId = match ? Number(match[1]) : 0
+    if (!Number.isSafeInteger(appId) || appId <= 0 || appId > 0xffffffff || seen.has(appId)) {
+      continue
+    }
+    seen.add(appId)
+    found.push({ appId, name: plain(item.name, 200) || `App ${appId}` })
+  }
+  return found
+}

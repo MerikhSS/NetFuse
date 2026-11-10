@@ -217,6 +217,10 @@ export function fakeBackend(base: string): SteamBackend {
         throw new SteamRefusedError(loginMessage(refused.eresult, refused.message), refused.eresult)
       }
       return new FakeSession(base, refreshToken, accountName)
+    },
+    async logOnAnonymous() {
+      const { token } = await call<{ token: string }>(base, '/cm/logon-anonymous', {})
+      return new FakeSession(base, token, '')
     }
   }
 }

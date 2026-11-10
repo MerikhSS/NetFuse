@@ -24,6 +24,7 @@ import {
 import { ConnectionError, NoCompatibleRouteError, StreamConnection } from '../network/routes'
 import { testKnobs, testStreamsPerNetwork } from '../testKnobs'
 import { SteamLoginRequiredError, type SteamAccount } from './account'
+import type { SteamAnonymous } from './anonymous'
 import { SteamRefusedError, type SteamSession } from './backend'
 import type { ChunkBook } from './cells'
 import { ChunkError } from './chunkCodec'
@@ -49,6 +50,8 @@ import type { ChunkWorkerPool } from './workerPool'
 
 export interface SteamTransferServices {
   account: SteamAccount
+  /** For a Workshop item of a game the account doesn't own (SteamRequestPayload.workshop). */
+  anonymous: SteamAnonymous
   workers: ChunkWorkerPool
 }
 
@@ -160,6 +163,11 @@ export class SteamTransfer implements Transfer {
   private readonly concurrency: ConcurrencyController | null
   private readonly disk = new DiskWatch()
 
+  /** A Workshop item through Steam's anonymous account (see anonymous.ts). */
+  private get anonymous(): boolean {
+    return this.runtime.requestPayload.workshop?.anonymous === true
+  }
+
   constructor(
     private readonly runtime: SteamTransferTarget,
     private readonly host: TransferHost,
@@ -218,14 +226,20 @@ export class SteamTransfer implements Transfer {
   }
 
   /** What a run needs from Steam before its streams start: a login, the depot keys and content
-   * servers. A failure fails the download, resumably. */
+   * servers. A failure fails the download, resumably. A Workshop item planned through Steam's
+   * anonymous account gets all of it there, and only ever its one Workshop depot. */
   private async prepareRun(): Promise<void> {
     const stop = this.runtime.stop.signal
     const { state, requestPayload } = this.runtime
     state.phase = 'preparing'
     this.host.scheduleUpdate()
     try {
-      const session = await this.services.account.current(LOGIN_WAIT_MS)
+      if (this.anonymous && requestPayload.depots.length !== 1) {
+        throw new Error('Steam’s anonymous account is only for a Workshop item’s files.')
+      }
+      const session = this.anonymous
+        ? await this.services.anonymous.current()
+        : await this.services.account.current(LOGIN_WAIT_MS)
       if (stop.aborted) return
       const keys = new Map<number, Buffer>()
       for (const depot of requestPayload.depots) {
@@ -826,10 +840,12 @@ export class SteamTransfer implements Transfer {
       // Turned down because the login is gone (not because of a license): said as such, since
       // logging in again is what resumes it.
       const eresult = eresultOf(error)
+      // Steam's anonymous account needs no login of the user's: its session logs on again by itself.
       const loginGone =
-        this.services.account.loginState.status !== 'logged-in' ||
-        eresult === EResult.NotLoggedOn ||
-        (eresult !== EResult.AccessDenied && loginExpired(eresult))
+        !this.anonymous &&
+        (this.services.account.loginState.status !== 'logged-in' ||
+          eresult === EResult.NotLoggedOn ||
+          (eresult !== EResult.AccessDenied && loginExpired(eresult)))
       this.host.failDownload(loginGone ? new SteamLoginRequiredError().message : message)
       return 'stop'
     }

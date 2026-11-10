@@ -60,7 +60,11 @@ export function DownloadActionsProvider({
           const store = useAppStore.getState()
           store.forgetDownload(item.id)
           if (item.workshop) {
-            store.openWorkshop({ appId: item.app.appId, search: item.workshop.title })
+            store.openWorkshop({
+              appId: item.app.appId,
+              name: item.app.name,
+              search: item.workshop.title
+            })
           } else openGame(item.app.appId)
           return true
         }

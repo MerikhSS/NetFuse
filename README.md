@@ -49,6 +49,7 @@ How much faster depends on your networks: each one adds speed only if it has its
 - **Log in the way Steam lets you**: account name and password with a Steam Guard code (email or the Steam Mobile App), or a QR code
 - **Choose what to install**: branch, system, architecture, language and depots, with download size, install size and free space shown
 - **The Steam Workshop** of every game you own with one: browse it in Steam's orders or search it, and download mods, maps and more into a folder you pick, over every network
+- **Workshops of games you don't own**, such as games you bought on GOG or Epic: turn on **Games you don't own** in the Workshop, and NetFuse lists the games whose Workshop Steam lets anyone download, through Steam's anonymous account, as SteamCMD's `login anonymous` does
 - **Auto-detect** your Steam libraries' `steamapps/common` folders, on any drive
 - **Install over an existing folder**: what's already there and correct is kept, and only what's missing or different is fetched
 - **Every chunk is checked** against Steam's manifest before it's written. A damaged copy is fetched again from another server.
@@ -64,6 +65,8 @@ How much faster depends on your networks: each one adds speed only if it has its
 5. In Steam, click **Install** on the game, with the same library selected. Steam finds the files NetFuse downloaded and checks them instead of downloading them again.
 
 For mods, open **Workshop** in the sidebar (or **Workshop** on a game's page), pick an item and click **Download**. It goes into a folder named after it, in the folder you choose. NetFuse doesn't subscribe to it in Steam, so point the game at that folder the way the game takes mods.
+
+For a game you have elsewhere, turn on **Games you don't own** at the top of the Workshop. Steam decides game by game whether anyone may download a Workshop: it allows it for many (Garry's Mod, RimWorld, Stellaris, Terraria, Project Zomboid…) and keeps others to the game's owners (Cities: Skylines, most Paradox games…), and only the open ones are listed.
 
 ## Install
 
@@ -102,11 +105,11 @@ Each system's build runs on that system. Local builds are unsigned, so your syst
 
 ## Your account
 
-- **Only what you own.** NetFuse downloads only the apps and depots your account is licensed for, Family Sharing included. When Steam turns a depot down, NetFuse says so and stops.
+- **Only what you own.** NetFuse downloads only the apps and depots your account is licensed for, Family Sharing included. When Steam turns a depot down, NetFuse says so and stops. The one exception is the Workshop, with **Games you don't own** on: there NetFuse also downloads the free Workshop items Steam itself lets its anonymous account have. That account is never used for a game itself.
 - **No password is kept.** Your password and Steam Guard codes go to Steam once, and are never stored or logged.
 - **Staying logged in** keeps only Steam's login token, encrypted with your system's keychain. Without one (some Linux setups), nothing is stored, and you log in each time NetFuse starts.
 - **Secrets stay in the background.** The app's window never sees a token, password or depot key.
-- **No telemetry.** NetFuse talks only to Steam, the content servers Steam hands out, and Steam's store CDN and Workshop image servers for pictures.
+- **No telemetry.** NetFuse talks only to Steam, the content servers Steam hands out, Steam's store CDN and Workshop image servers for pictures, and Steam's store search for games with a Workshop.
 
 ## Status
 

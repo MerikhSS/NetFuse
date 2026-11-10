@@ -275,6 +275,13 @@ export interface SteamOriginOptions {
   /** More of the account's library: listed, but with nothing in them to download. Borrowed ones
    * come through Family Sharing. */
   otherApps?: { appId: number; name: string; type?: string; borrowed?: boolean }[]
+  /** The account owns the app (the default). Without it, the app is only on the store. */
+  ownsApp?: boolean
+  /** Steam lets its anonymous account have the app's Workshop, as it does some games'. */
+  anonymousWorkshop?: boolean
+  /** Other games on the store with a Workshop, the account owns none of: listed by the store's
+   * search, with nothing in them. `open`: Steam lets its anonymous account have the Workshop. */
+  storeWorkshops?: { appId: number; name: string; open: boolean; type?: string }[]
 }
 
 /** A PNG of `width` × `height`, shading from one color to another top to bottom: a stand-in for a
@@ -332,6 +339,11 @@ export class SteamOrigin {
   readonly workshopArtRequests: string[] = []
   /** Every Workshop query, as the app sent it. */
   readonly workshopQueries: Record<string, unknown>[] = []
+  /** Everything asked of Steam's anonymous account, as path and query. */
+  readonly anonymousRequests: string[] = []
+  /** Every search of the store, as its query string. */
+  readonly storeSearches: URLSearchParams[] = []
+  private readonly anonymousSessions = new Set<string>()
   private readonly chunks = new Map<string, FixtureChunk>()
   private readonly attempts = new Map<string, Attempt>()
   private readonly sessions = new Set<string>()
@@ -641,6 +653,36 @@ export class SteamOrigin {
       const refreshToken = this.newRefreshToken()
       return send({ done: true, refreshToken, accountName: attempt.accountName })
     }
+    // Steam's store search: the games with a Workshop (category 30), most popular first, or
+    // those whose names match.
+    if (path === '/store/search/results/') {
+      this.storeSearches.push(url.searchParams)
+      if (param('category2') !== '30' || param('json') !== '1') return send({ desc: '', items: [] })
+      const games = [
+        ...(this.app.workshop ? [{ appId: this.app.appId, name: this.app.name }] : []),
+        ...(this.options.storeWorkshops ?? [])
+      ]
+      const term = param('term').toLowerCase()
+      const start = Number(param('start')) || 0
+      const count = Number(param('count')) || 50
+      return send({
+        desc: '',
+        items: games
+          .filter((game) => game.name.toLowerCase().includes(term))
+          .slice(start, start + count)
+          .map((game) => ({
+            name: game.name,
+            logo: `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${game.appId}/capsule_sm_120.jpg`
+          }))
+      })
+    }
+
+    if (path === '/cm/logon-anonymous') {
+      const token = `anonymous-${randomUUID()}`
+      this.sessions.add(token)
+      this.anonymousSessions.add(token)
+      return send({ token })
+    }
     if (path === '/cm/logon') {
       const token = req.headers['x-steam-token']
       if (
@@ -661,8 +703,14 @@ export class SteamOrigin {
     }
     if (!this.loggedIn(req)) return refuse('Not logged on', 21)
     if (path === '/cm/alive') return send({ ok: true })
+    const anonymous = this.anonymousSessions.has(String(session))
+    if (anonymous) this.anonymousRequests.push(`${path}${url.search}`)
     const others = this.options.otherApps ?? []
+    const owns = this.options.ownsApp !== false
+    const store = this.options.storeWorkshops ?? []
     if (path === '/cm/licenses') {
+      // Steam's anonymous account owns nothing.
+      if (anonymous) return send([])
       return send([
         { packageId: 5000, borrowed: false },
         ...(others.some((other) => other.borrowed) ? [{ packageId: 5001, borrowed: true }] : [])
@@ -676,11 +724,21 @@ export class SteamOrigin {
         const dlc = this.app.depots.find((depot) => depot.dlcAppId === appId)
         if (dlc) return { common: { name: dlc.name, type: 'DLC' }, depots: {} }
         const other = others.find((entry) => entry.appId === appId)
-        return other && { common: { name: other.name, type: other.type ?? 'Game' }, depots: {} }
+        if (other) return { common: { name: other.name, type: other.type ?? 'Game' }, depots: {} }
+        const sold = store.find((entry) => entry.appId === appId)
+        return (
+          sold && {
+            common: { name: sold.name, type: sold.type ?? 'Game', workshop_visible: '1' },
+            depots: {}
+          }
+        )
       }
       const appIds = (packageId: number): number[] =>
         packageId === 5000
-          ? [this.app.appId, ...others.filter((o) => !o.borrowed).map((o) => o.appId)]
+          ? [
+              ...(owns ? [this.app.appId] : []),
+              ...others.filter((o) => !o.borrowed).map((o) => o.appId)
+            ]
           : others.filter((o) => o.borrowed).map((o) => o.appId)
       return send({
         apps: Object.fromEntries(
@@ -701,7 +759,7 @@ export class SteamOrigin {
                     packageId === 5000
                       ? Object.fromEntries(
                           this.app.depots
-                            .filter((depot) => depot.owned)
+                            .filter((depot) => owns && depot.owned)
                             .map((depot, index) => [index, depot.depotId])
                         )
                       : {}
@@ -746,15 +804,27 @@ export class SteamOrigin {
         })
       )
     }
+    // A Workshop's depot is for the game's owners, and for Steam's anonymous account where the
+    // game lets it; a game's own depots are only ever its owners'.
+    const workshopOpen = (): boolean => (anonymous ? this.options.anonymousWorkshop === true : owns)
+    const isWorkshopDepot = Number(param('depot')) === this.app.workshop?.depotId
     if (path === '/cm/depotkey') {
       const workshop = this.app.workshop
-      // A Workshop's depot is for the game's owners, as the test account is.
-      if (workshop && Number(param('depot')) === workshop.depotId) {
+      if (workshop && isWorkshopDepot) {
+        if (!workshopOpen()) return refuse('Access denied', 15)
         return send({ key: workshop.key.toString('hex') })
       }
+      const sold = store.find((entry) => entry.appId === Number(param('depot')))
+      if (sold) {
+        if (!anonymous || !sold.open) return refuse('Access denied', 15)
+        return send({ key: randomBytes(32).toString('hex') })
+      }
       const depot = this.app.depots.find((entry) => entry.depotId === Number(param('depot')))
-      if (!depot?.owned) return refuse('Access denied', 15)
+      if (anonymous || !owns || !depot?.owned) return refuse('Access denied', 15)
       return send({ key: depot.key.toString('hex') })
+    }
+    if (anonymous && (path === '/cm/requestcode' || path === '/cm/token')) {
+      if (!isWorkshopDepot || !workshopOpen()) return refuse('Access denied', 15)
     }
     if (path === '/cm/requestcode') {
       const code = String(BigInt.asUintN(64, randomBytes(8).readBigUInt64LE()))

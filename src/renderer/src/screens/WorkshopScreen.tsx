@@ -1,4 +1,4 @@
-import type { SteamOwnedApp, WorkshopItem, WorkshopSort } from '@shared/steam'
+import type { WorkshopGame, WorkshopItem, WorkshopSort } from '@shared/steam'
 import { cn } from 'cn'
 import { AlertTriangle, Check, ChevronDown, ChevronLeft, Search } from 'lucide-react'
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -11,15 +11,18 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger
 } from '../components/ui/dropdown-menu'
+import { Switch } from '../components/ui/switch'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip'
 import { useWorkshopState } from '../hooks/useGameState'
 import { useAppStore, type WorkshopBrowse } from '../store/useAppStore'
 import { formatBytes } from '../utils/format'
 import { describeWorkshopState } from '../utils/gameState'
 
 // The Steam Workshop: mods, maps and the like that players make for a game, listed by Steam. The
-// games the account owns that have a Workshop come first, to choose from; then the chosen game's
-// items in one of Steam's orders, or matching a search, a page at a time. An item opens its own
-// page, to be downloaded into a folder of the user's choosing (WorkshopItemScreen).
+// games the account owns that have a Workshop come first, to choose from; with "Games you don't
+// own" on, the store's games whose Workshops Steam lets its anonymous account have instead. Then
+// the chosen game's items in one of Steam's orders, or matching a search, a page at a time. An item
+// opens its own page, to be downloaded into a folder of the user's choosing (WorkshopItemScreen).
 
 const SORTS: { value: WorkshopSort; label: string }[] = [
   { value: 'popular', label: 'Most popular' },
@@ -97,12 +100,50 @@ function Failure({
   )
 }
 
-/** The games the account owns that have a Workshop, to choose one. */
+/** The games whose Workshops can be listed, to choose one: the account's own, or, with the switch
+ * on, those on Steam's store whose Workshops Steam lets its anonymous account have. */
 function WorkshopGames(): React.JSX.Element {
+  const anonymous = useAppStore((store) => store.workshopAnonymous)
+  const setAnonymous = useAppStore((store) => store.setWorkshopAnonymous)
+  const [query, setQuery] = useState('')
+
+  return (
+    <div className="flex h-full flex-col bg-background">
+      <div className="flex h-12 shrink-0 items-center gap-3 border-b-[0.5px] border-border px-5">
+        <h1 className="font-sans text-[14px] leading-none font-semibold">Workshop</h1>
+        <div className="flex-1" />
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <label className="flex shrink-0 items-center gap-2 text-[12.5px] text-[var(--text-secondary)]">
+                Games you don’t own
+                <Switch checked={anonymous} onCheckedChange={setAnonymous} />
+              </label>
+            }
+          />
+          <TooltipContent className="max-w-72">
+            Through Steam’s anonymous account, as SteamCMD’s “login anonymous” does. Steam allows it
+            for some games’ Workshops.
+          </TooltipContent>
+        </Tooltip>
+        <SearchBox
+          value={query}
+          onChange={setQuery}
+          label={anonymous ? 'Search Steam' : 'Search your games'}
+        />
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {anonymous ? <StoreGames query={query} /> : <OwnedGames query={query} />}
+      </div>
+    </div>
+  )
+}
+
+/** The games the account owns that have a Workshop, searched by name. */
+function OwnedGames({ query }: { query: string }): React.JSX.Element {
   const library = useAppStore((store) => store.library)
   const loadLibrary = useAppStore((store) => store.loadLibrary)
   const browseWorkshop = useAppStore((store) => store.browseWorkshop)
-  const [query, setQuery] = useState('')
 
   const games = library.status === 'ready' ? library.apps.filter((app) => app.workshop) : []
   const needle = query.trim().toLowerCase()
@@ -110,68 +151,138 @@ function WorkshopGames(): React.JSX.Element {
     ? games.filter((app) => app.name.toLowerCase().includes(needle) || String(app.appId) === needle)
     : games
 
+  if (library.status === 'loading' || library.status === 'idle') {
+    return <Message>Loading your library…</Message>
+  }
+  if (library.status === 'error') {
+    return <Failure message={library.message} onRetry={() => void loadLibrary(true)} />
+  }
+  if (games.length === 0) {
+    return <Message>None of the games this account owns has a Steam Workshop.</Message>
+  }
   return (
-    <div className="flex h-full flex-col bg-background">
-      <div className="flex h-12 shrink-0 items-center gap-3 border-b-[0.5px] border-border px-5">
-        <h1 className="font-sans text-[14px] leading-none font-semibold">Workshop</h1>
-        {library.status === 'ready' && (
-          <span className="font-mono text-[11.5px] text-muted-foreground tabular-nums">
-            {shown.length === games.length ? games.length : `${shown.length} of ${games.length}`}
-          </span>
+    <div className="flex flex-col gap-4 p-5">
+      <p className="text-[12.5px] text-muted-foreground">
+        Mods, maps and more, made by players for the games you own. Choose a game to see its
+        Workshop.
+      </p>
+      {shown.length === 0 ? (
+        <Message>None of your games with a Workshop matches.</Message>
+      ) : (
+        <GameList
+          games={shown.map((app) => ({ appId: app.appId, name: app.name, owned: true }))}
+          onOpen={(game) => browseWorkshop({ appId: game.appId })}
+        />
+      )}
+    </div>
+  )
+}
+
+/** The games on Steam's store whose Workshops NetFuse can download from, the most popular first or
+ * searched for: those Steam lets its anonymous account have, and the account's own. */
+function StoreGames({ query }: { query: string }): React.JSX.Element {
+  const list = useAppStore((store) => store.workshopGames)
+  const loadWorkshopGames = useAppStore((store) => store.loadWorkshopGames)
+  const browseWorkshop = useAppStore((store) => store.browseWorkshop)
+  const search = query.trim()
+
+  // Searched once typing pauses; the store's most popular at once.
+  useEffect(() => {
+    const timer = setTimeout(() => void loadWorkshopGames(search), search ? SEARCH_DELAY_MS : 0)
+    return () => clearTimeout(timer)
+  }, [search, loadWorkshopGames])
+
+  const games = list?.games ?? []
+  const status = list?.status ?? 'loading'
+  return (
+    <div className="flex flex-col gap-4 p-5">
+      <p className="text-[12.5px] text-muted-foreground">
+        Games whose Workshop Steam lets anyone download, through its anonymous account, and yours.
+        Steam decides game by game: a game it keeps to its owners isn’t listed.
+      </p>
+      {status === 'loading' && games.length === 0 && (
+        <Message>Asking Steam which games’ Workshops are open…</Message>
+      )}
+      {status === 'error' && games.length === 0 && (
+        <Failure message={list?.error ?? ''} onRetry={() => void loadWorkshopGames(search)} />
+      )}
+      {status === 'ready' && games.length === 0 && (
+        <Message>
+          {search
+            ? `No game matching “${search}” has a Workshop Steam lets anyone download, on this page of the store.`
+            : 'No game on this page of the store has a Workshop Steam lets anyone download.'}
+        </Message>
+      )}
+      {games.length > 0 && (
+        <GameList
+          games={games}
+          onOpen={(game) => browseWorkshop({ appId: game.appId, name: game.name })}
+        />
+      )}
+      <div className="flex flex-col items-center gap-2.5">
+        {status === 'error' && games.length > 0 ? (
+          <Failure
+            message={list?.error ?? ''}
+            onRetry={() => void loadWorkshopGames(search, true)}
+          />
+        ) : (
+          list?.nextStart !== undefined && (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={status === 'loading'}
+              onClick={() => void loadWorkshopGames(search, true)}
+            >
+              {status === 'loading' ? 'Loading…' : 'Load more'}
+            </Button>
+          )
         )}
-        <div className="flex-1" />
-        <SearchBox value={query} onChange={setQuery} label="Search your games" />
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {(library.status === 'loading' || library.status === 'idle') && (
-          <Message>Loading your library…</Message>
-        )}
-        {library.status === 'error' && (
-          <Failure message={library.message} onRetry={() => void loadLibrary(true)} />
-        )}
-        {library.status === 'ready' &&
-          (games.length === 0 ? (
-            <Message>None of the games this account owns has a Steam Workshop.</Message>
-          ) : (
-            <div className="flex flex-col gap-4 p-5">
-              <p className="text-[12.5px] text-muted-foreground">
-                Mods, maps and more, made by players for the games you own. Choose a game to see its
-                Workshop.
-              </p>
-              {shown.length === 0 ? (
-                <Message>None of your games with a Workshop matches.</Message>
-              ) : (
-                <div
-                  role="list"
-                  aria-label="Games with a Workshop"
-                  className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2"
-                >
-                  {shown.map((app) => (
-                    <div key={app.appId} role="listitem">
-                      <GameRow app={app} onOpen={() => browseWorkshop({ appId: app.appId })} />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
       </div>
     </div>
   )
 }
 
-function GameRow({ app, onOpen }: { app: SteamOwnedApp; onOpen: () => void }): React.JSX.Element {
+function GameList({
+  games,
+  onOpen
+}: {
+  games: WorkshopGame[]
+  onOpen: (game: WorkshopGame) => void
+}): React.JSX.Element {
+  return (
+    <div
+      role="list"
+      aria-label="Games with a Workshop"
+      className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2"
+    >
+      {games.map((game) => (
+        <div key={game.appId} role="listitem">
+          <GameRow game={game} onOpen={() => onOpen(game)} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function GameRow({ game, onOpen }: { game: WorkshopGame; onOpen: () => void }): React.JSX.Element {
+  const anonymous = useAppStore((store) => store.workshopAnonymous)
   return (
     <button
       type="button"
-      aria-label={app.name}
+      aria-label={game.name}
       onClick={onOpen}
       className="flex w-full cursor-default items-center gap-3 rounded-lg border-[0.5px] border-border bg-card p-2 text-left outline-none hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
     >
       <div className="h-12 w-8 shrink-0 overflow-hidden rounded-md ring-1 ring-foreground/10">
-        <GameCapsule appId={app.appId} name={app.name} small lazy />
+        <GameCapsule appId={game.appId} name={game.name} small lazy />
       </div>
-      <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{app.name}</span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-[13px] font-medium">{game.name}</span>
+        {/* Beside games that aren't: which of the store's are the account's own. */}
+        {anonymous && game.owned && (
+          <span className="text-[11.5px] text-muted-foreground">In your library</span>
+        )}
+      </span>
     </button>
   )
 }
@@ -186,10 +297,11 @@ function GameWorkshop({ appId }: { appId: number }): React.JSX.Element {
   const browseWorkshop = useAppStore((store) => store.browseWorkshop)
   const loadWorkshop = useAppStore((store) => store.loadWorkshop)
   const setView = useAppStore((store) => store.setView)
-  const name = useAppStore((store) =>
-    store.library.status === 'ready'
-      ? store.library.apps.find((app) => app.appId === appId)?.name
-      : undefined
+  const name = useAppStore(
+    (store) =>
+      (store.library.status === 'ready'
+        ? store.library.apps.find((app) => app.appId === appId)?.name
+        : undefined) ?? store.workshop.name
   )
   const [text, setText] = useState(workshop.search)
   const scroller = useRef<HTMLDivElement>(null)

@@ -111,4 +111,7 @@ export interface SteamBackend {
   startQr(): Promise<LoginAttempt>
   /** A session from a refresh token. Rejects (a SteamRefusedError) when Steam won't take it. */
   logOn(refreshToken: string, accountName: string): Promise<SteamSession>
+  /** A session on Steam's anonymous account, as SteamCMD's `login anonymous`: it owns nothing,
+   * and Steam decides game by game whether it may have a Workshop's items (see anonymous.ts). */
+  logOnAnonymous(): Promise<SteamSession>
 }
